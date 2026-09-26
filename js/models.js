@@ -2,6 +2,8 @@
 // `provider` decides which API adapter and which API key is used.
 // `defaultModel` is only a starting point: Settings can load the provider's
 // live model list and store a different model id per entry.
+// `price` is an editable estimate in US dollars per million tokens
+// (input / output), used only to compare the cost of routing choices.
 
 export const PROVIDERS = {
   anthropic: { label: 'Anthropic', keyLabel: 'Anthropic API key', keyHint: 'sk-ant-…', docs: 'https://console.anthropic.com/settings/keys' },
@@ -15,37 +17,44 @@ export const MODELS = [
   {
     id: 'claude', name: 'Claude', maker: 'Anthropic', provider: 'anthropic',
     weights: 'closed', region: 'US', defaultModel: 'claude-sonnet-5',
+    price: { in: 3, out: 15 },
     note: 'Strong reasoning and long documents',
   },
   {
     id: 'gpt', name: 'GPT', maker: 'OpenAI', provider: 'openai',
     weights: 'closed', region: 'US', defaultModel: 'gpt-5-mini',
+    price: { in: 0.25, out: 2 },
     note: 'General purpose, broad tool support',
   },
   {
     id: 'gemini', name: 'Gemini', maker: 'Google', provider: 'google',
     weights: 'closed', region: 'US', defaultModel: 'gemini-2.5-flash',
+    price: { in: 0.3, out: 2.5 },
     note: 'Fast, large context window',
   },
   {
     id: 'grok', name: 'Grok', maker: 'xAI', provider: 'xai',
     weights: 'closed', region: 'US', defaultModel: 'grok-3-mini',
     openrouterModel: 'x-ai/grok-3-mini',
+    price: { in: 0.3, out: 0.5 },
     note: 'Direct or routed through OpenRouter',
   },
   {
     id: 'mistral', name: 'Mistral', maker: 'Mistral AI', provider: 'openrouter',
     weights: 'open', region: 'EU', defaultModel: 'mistralai/mistral-small-3.2-24b-instruct',
+    price: { in: 0.1, out: 0.3 },
     note: 'European open-weight model',
   },
   {
     id: 'llama', name: 'Llama', maker: 'Meta', provider: 'openrouter',
     weights: 'open', region: 'Any', defaultModel: 'meta-llama/llama-3.3-70b-instruct',
+    price: { in: 0.13, out: 0.4 },
     note: 'Open weights, self-hostable',
   },
   {
     id: 'qwen', name: 'Qwen', maker: 'Alibaba', provider: 'openrouter',
     weights: 'open', region: 'Any', defaultModel: 'qwen/qwen-2.5-72b-instruct',
+    price: { in: 0.12, out: 0.39 },
     note: 'Open weights, strong multilingual',
   },
 ];

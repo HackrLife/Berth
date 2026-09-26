@@ -8,6 +8,7 @@ const KEY = 'berth.v1';
 const DEFAULT_STATE = {
   keys: { anthropic: '', openai: '', google: '', xai: '', openrouter: '' },
   modelIds: {}, // catalogue id -> provider model id override
+  prices: {}, // catalogue id -> { in, out } USD per million tokens, overrides the estimate
   grokRoute: 'direct', // 'direct' | 'openrouter'
   policy: {
     allowedModels: MODELS.map((m) => m.id),
@@ -18,6 +19,7 @@ const DEFAULT_STATE = {
   chats: {}, // buildId -> [{ role, content, meta }]
   audit: [],
   seeded: false,
+  version: 0,
 };
 
 function read() {
