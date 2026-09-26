@@ -1,6 +1,6 @@
 # Berth — Product Requirements Document
 
-**Version:** 0.3 (draft)
+**Version:** 0.4 (draft)
 **Author:** Dev Das
 **Status:** In development
 **Last updated:** September 2026
@@ -50,8 +50,10 @@ Enterprise AI platforms address the first three problems at scale. Berth is a de
 
 ## 5. Core features
 
-### 5.1 Model picker (home screen)
-The home screen is a two-step builder. Step one is the choice of model.
+### 5.1 Landing page and builder
+The site opens on a landing page that explains what Berth does, how the three build types differ, why routing between models reduces cost, which governance controls apply, and the four governed examples. "Start building" opens the builder, which asks two questions in order: what are you building, and which models take which roles.
+
+Seven models are available:
 
 | Model | Maker | Weights | Route |
 |---|---|---|---|
@@ -63,30 +65,34 @@ The home screen is a two-step builder. Step one is the choice of model.
 | Llama | Meta | Open | OpenRouter |
 | Qwen | Alibaba | Open | OpenRouter |
 
-- Each model card shows a provenance tag (hosting region, open or closed weights) and its status: ready, API key missing, or not allowed by policy.
-- The specific model version for each entry is configurable in Settings, where Berth can load the provider's current list of models, so the catalogue does not go out of date.
+- Each model shows a provenance tag (hosting region, open or closed weights), an estimated price per million tokens, and its status: ready, API key missing, or not allowed by policy.
+- The specific model version for each entry is configurable in Settings, where Berth can load the provider's current list of models.
 
-### 5.2 Build types
-Step two is the choice of what to build. The three types form a progression, each adding a layer to the one before.
+### 5.2 Build types and model roles
+The three types differ in how many models take part and how they work together.
 
-| Type | What it is | What the user configures |
+| Type | Models | How they work together |
 |---|---|---|
-| **Chatbot** | A model with instructions, answering in conversation | Instructions, starter prompts, reference text |
-| **Agent** | A chatbot that can plan and use tools over several steps | Everything above, plus tools and a step limit |
-| **Harness** | An agent wrapped in controls the user sets explicitly | Everything above, plus per-tool permissions (run automatically, ask first, blocked), approval gates, record-keeping, AI labelling and a library of safeguards |
+| **Chatbot** | One | The model answers from its instructions and reference text. |
+| **Agent** | Router, fast model, strong model | The router, a cheap model, classifies each request as simple or complex. Simple requests go to the fast model and complex ones to the strong model, which can use tools over several steps. |
+| **Harness** | Router, fast model, strong model, reviewer | The agent pipeline, followed by an independent reviewer model that checks the draft against the instructions and the controls in force. If the reviewer finds issues, the strong model revises once and the reviewer checks again. Human approval, per-tool permissions and a safeguard library are set by the user. |
 
-In a chatbot or an agent, the controls follow from the risk tier. In a harness, the tier sets defaults and the user decides each control, which makes the harness the unit in which governance is designed rather than inherited. v0.1 agents can use four browser-safe tools: a calculator, the current date and time, a Wikipedia lookup and a search over the build's reference text.
+Routing serves cost and efficiency: most workplace requests are simple, and sending them to the strongest model costs several times more than needed. The router defaults to the strong model when it is unsure, and routing can be switched off for any build. Choosing a reviewer from a different vendor to the workers gives a more independent check, and Berth warns when they share a vendor.
+
+Every answer shows its pipeline (stage, model, tokens, estimated cost), the reviewer's findings, the total cost and the cost of the same token volume on the strong model alone. Prices are editable estimates in Settings.
+
+v0.1 agents and harnesses can use four browser-safe tools: a calculator, the current date and time, a Wikipedia lookup and a search over the build's reference text.
 
 Every build records its intended purpose and its deployment context ("used by"), which together determine its risk tier (5.4).
 
 v0.1 ships with four governed examples, one for each of four regulated industries and together covering all three build types:
 
-| Example | Industry | Type | Model | Job |
+| Example | Industry | Type | Models | Job |
 |---|---|---|---|---|
 | **Symptom Guide** | Health | Chatbot | Claude | Gives general guidance on symptoms and when to seek care. |
-| **Loan Eligibility Checker** | Finance | Agent | GPT | Assesses a loan application against stated lending criteria, using the calculator and the criteria text. |
+| **Loan Eligibility Checker** | Finance | Agent | Router Mistral · fast Gemini · strong GPT | Assesses a loan application against stated lending criteria, using the calculator and the criteria text. |
 | **Contract Reviewer** | Legal | Chatbot | Mistral | Reviews contract clauses and identifies obligations and risks. |
-| **Candidate Screener** | HR | Harness | Claude | Assesses CVs against a job description and proposes a shortlist. |
+| **Candidate Screener** | HR | Harness | Router Mistral · fast Gemini · strong Claude · reviewer GPT | Assesses CVs against a job description and proposes a shortlist. |
 
 ### 5.3 Governance layer (workspace level)
 The governance layer runs on every outgoing prompt, in this order:
@@ -133,7 +139,7 @@ The Contract Reviewer demonstrates two points. Changing its deployment context f
 ## 7. Architecture
 
 - **Type:** a static single-page application with no build step, served by GitHub Pages.
-- **Stack:** HTML, CSS and plain JavaScript ES modules: `models` (catalogue), `providers` (API adapters), `governance` (redaction, policy, output checks, audit), `risk` (tiers and controls), `tools`, `templates`, `store` and `app` (interface).
+- **Stack:** HTML, CSS and plain JavaScript ES modules: `models` (catalogue), `providers` (API adapters), `pipeline` (routing, review and cost), `governance` (redaction, policy, output checks, audit), `risk` (tiers and controls), `tools`, `templates`, `store` and `app` (interface).
 - **Model calls:** made directly from the browser to each provider's API with the user's own key. Three adapters cover all seven models: the Anthropic Messages API, the OpenAI-compatible Chat Completions API (OpenAI, xAI and OpenRouter) and the Gemini API. No Berth server exists, so no request passes through the author.
 - **Storage:** browser `localStorage` for keys, assistants, settings, chat history and the audit log.
 - **Risk classification:** a single structured model call on assistant save, returning a tier, the legal basis and a rationale as JSON. The tier-to-control mapping is a fixed table in code, so the controls are deterministic even though the classification is model-assisted.
@@ -170,7 +176,7 @@ The Contract Reviewer demonstrates two points. Changing its deployment context f
 | # | Milestone | Output |
 |---|---|---|
 | M1 | PRD and repository | This document, repository, README, GitHub Pages enabled |
-| M2 | Builder and chat | Model picker for seven models, chatbot, agent and harness types, streaming, API key settings |
+| M2 | Builder and chat | Landing page, type-first builder, seven models, model roles and routing, reviewer stage, cost per answer, streaming, API key settings |
 | M3 | Governed examples | Four industry examples, create and edit |
 | M4 | Governance | Redaction, policy check, audit log with export |
 | M4b | Risk tiers | Classifier on save, tier-to-control mapping, domain safeguards, deployment-context switch |
@@ -184,4 +190,6 @@ The Contract Reviewer demonstrates two points. Changing its deployment context f
 - Role-based admin and user views.
 - Conversation branching and navigation between branches.
 - Additional open-weight models through OpenRouter.
+- Export a harness as an n8n workflow, so a pipeline designed and tested in Berth can run in production on an automation platform.
+- A server-side proxy so visitors can try the demo without their own API keys, with a daily spending cap.
 - Further regulatory frameworks alongside the EU AI Act, such as Australia's voluntary AI safety standard and sector rules for health and financial services.

@@ -11,26 +11,27 @@ Berth is a small, working prototype built as preparatory work for doctoral resea
 
 ## What it does
 
-1. **Choose a model.** Seven models: Claude, GPT, Gemini and Grok (closed weights), and Mistral, Llama and Qwen (open weights, through OpenRouter). Each shows where it is hosted and whether its weights are open.
-2. **Choose what to build.**
-   - **Chatbot:** a model with instructions and reference text.
-   - **Agent:** a chatbot that plans and uses tools (calculator, date and time, Wikipedia, search over its reference text).
-   - **Harness:** an agent wrapped in controls you set yourself: per-tool permissions, approval gates, record-keeping and safeguards.
+1. **Say what you are building.**
+   - **Chatbot:** one model with instructions and reference text.
+   - **Agent:** a cheap router model sorts each request as simple or complex and sends it to a fast model or a strong model. The model doing the work can use tools (calculator, date and time, Wikipedia, search over its reference text).
+   - **Harness:** the agent pipeline plus an independent reviewer model that checks every draft against the rules, one revision on the strong model if the reviewer finds issues, per-tool permissions and human approval.
+2. **Assign models to roles.** Seven models are available: Claude, GPT, Gemini and Grok (closed weights), and Mistral, Llama and Qwen (open weights, through OpenRouter). A chatbot uses one. An agent uses a router, a fast model and a strong model. A harness adds a reviewer, ideally from a different vendor.
 3. **Get a risk tier.** When you save, the model proposes a tier under the EU AI Act based on the build's purpose and who uses it. You confirm or override it, and the tier switches on the matching controls.
-4. **Use it with governance in the loop.**
+4. **Use it with governance and cost in view.**
    - Personal data (emails, phone numbers, card numbers, IBANs, Australian Tax File Numbers) is replaced with placeholders **before** the prompt leaves the browser. The composer shows what will be removed while you type.
    - Blocked terms and a list of allowed models apply across the workspace.
    - High-risk answers are held until a person approves them.
-   - Every request, block, approval and tier decision goes into an audit log you can export as CSV or JSON.
+   - Every answer shows its pipeline (which model did which stage), its token use and cost, and what the same run would have cost on the strong model alone.
+   - Every request, route, review, block, approval and tier decision goes into an audit log you can export as CSV or JSON.
 
 ## Governed examples
 
 | Example | Industry | Type | Tier | Safeguards |
 |---|---|---|---|---|
 | Symptom Guide | Health | Chatbot | High (medical device software, Annex I) | Emergency stop on red-flag symptoms, no diagnosis or dosage, "not medical advice" check |
-| Loan Eligibility Checker | Finance | Agent | High (credit scoring, Annex III) | Plain-language reasons required, no final decisions, human sign-off |
+| Loan Eligibility Checker | Finance | Agent: Mistral routes, Gemini or GPT works | High (credit scoring, Annex III) | Plain-language reasons required, no final decisions, human sign-off |
 | Contract Reviewer | Legal | Chatbot | Minimal for a law firm, High for a court | Client names redacted, citations flagged unverified |
-| Candidate Screener | HR | Harness | High (recruitment, Annex III) | Blind screening, shortlist only, human approval |
+| Candidate Screener | HR | Harness: Mistral routes, Gemini or Claude works, GPT reviews | High (recruitment, Annex III) | Blind screening, shortlist only, independent review, human approval |
 
 Try this: open **Contract Reviewer** and change *Used by* to *Court or tribunal*. The same assistant moves from Minimal to High risk, because the AI Act classifies by use rather than by technology.
 
@@ -57,6 +58,7 @@ css/berth.css       design tokens and components
 js/models.js        the seven-model catalogue
 js/providers.js     three API adapters (Anthropic, OpenAI-compatible, Gemini), streaming and tool loops
 js/governance.js    redaction, policy checks, pre-send guards, output checks, audit log
+js/pipeline.js      multi-model execution: routing, review, revision, cost per stage
 js/risk.js          risk tiers, tier-to-control mapping, model-assisted classification
 js/tools.js         browser-safe agent tools
 js/templates.js     the four governed examples
@@ -67,6 +69,7 @@ js/app.js           interface, routing and the send pipeline
 Design choices worth noting:
 
 - **Classification is model-assisted and enforcement is deterministic.** A model proposes the tier, a person confirms it, and a fixed table in code decides the controls.
+- **Routing is governed too.** The router sees only the redacted request, defaults to the strong model when unsure, and its decision is logged with every answer.
 - **Only redacted text is stored or sent.** The original message never leaves the composer.
 - **Full prompts are logged only where the tier or harness requires it**, balancing record-keeping (Art. 12) against data minimisation (GDPR Art. 5(1)(c)).
 
@@ -74,6 +77,7 @@ Design choices worth noting:
 
 - Pattern-based redaction catches structured data and labelled fields, not every name in free text.
 - The risk tier is indicative, not a legal assessment.
+- Costs are estimates from the editable price table in Settings, not provider invoices.
 - Some providers may block direct browser calls. Grok can be routed through OpenRouter in Settings if that happens.
 
 ## Author

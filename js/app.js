@@ -2,7 +2,10 @@
 
 import { MODELS, PROVIDERS, modelById, provenance } from './models.js';
 import { state, save, uid, resetAll } from './store.js';
-import { runTurn, listModels, hasKey, resolve } from './providers.js';
+import { listModels, hasKey } from './providers.js';
+import {
+  ROLES, rolesFor, defaultModels, modelsUsed, execute, priceOf, formatCost,
+} from './pipeline.js';
 import {
   redact, checkPolicy, preSend, checkOutput, audit, estimateTokens, summarise, describeCounts, auditToCsv, PII_TYPES,
 } from './governance.js';
@@ -20,18 +23,24 @@ const app = () => $('#app');
 const TYPES = {
   chatbot: {
     label: 'Chatbot',
-    line: 'Answers questions from instructions and reference text.',
-    parts: ['Instructions', 'Starter prompts', 'Reference text'],
+    models: 'One model',
+    line: 'Answers questions from its instructions and reference text.',
+    parts: ['One model', 'Instructions', 'Reference text'],
+    example: 'A policy Q&A bot for staff',
   },
   agent: {
     label: 'Agent',
-    line: 'Plans and uses tools to complete a task in several steps.',
-    parts: ['Everything in a chatbot', 'Tools', 'Step limit'],
+    models: 'Two or three models',
+    line: 'A cheap router sends simple requests to a fast model and complex ones to a strong model, which can use tools.',
+    parts: ['Model routing', 'Tools', 'Step limit'],
+    example: 'A loan assessor that calculates repayments',
   },
   harness: {
     label: 'Harness',
-    line: 'Wraps an agent in controls you set: tool permissions, approval gates and output checks.',
-    parts: ['Everything in an agent', 'Per-tool permissions', 'Safeguards you choose'],
+    models: 'Up to four models',
+    line: 'An agent inside a controlled pipeline: triage, work, an independent reviewer model, then human approval.',
+    parts: ['Routing', 'Independent reviewer', 'Tool permissions', 'Approval gates'],
+    example: 'A CV screener with blind screening and sign-off',
   },
 };
 
@@ -99,6 +108,8 @@ function buildFromTemplate(t) {
     usedBy: t.usedBy,
     instructions: t.instructions,
     starters: [...(t.starters || [])],
+    models: t.models ? { ...t.models } : defaultModels(t.type, t.modelId),
+    routing: true,
     tools: [...(t.tools || [])],
     knowledge: t.knowledge || '',
     protectedTerms: [...(t.protectedTerms || [])],
@@ -117,6 +128,22 @@ function buildFromTemplate(t) {
 if (!state.seeded) {
   state.builds = TEMPLATES.map(buildFromTemplate);
   state.seeded = true;
+  state.version = 2;
+  save();
+}
+
+// v2 added multi-model routing: refresh the examples in place, keep their ids.
+if ((state.version || 0) < 2) {
+  for (const t of TEMPLATES) {
+    const i = state.builds.findIndex((b) => b.templateKey === t.key);
+    const fresh = buildFromTemplate(t);
+    if (i >= 0) state.builds[i] = { ...fresh, id: state.builds[i].id };
+    else state.builds.push(fresh);
+  }
+  for (const b of state.builds) {
+    if (b.type !== 'chatbot' && !b.models) { b.models = defaultModels(b.type, b.modelId); b.routing = true; }
+  }
+  state.version = 2;
   save();
 }
 
@@ -130,6 +157,15 @@ for (const chat of Object.values(state.chats)) {
 // ---------------------------------------------------------------------------
 // Layout
 
+const ICON = {
+  home: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z"/></svg>',
+  plus: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
+  shield: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3z"/></svg>',
+  list: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>',
+  gear: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>',
+  arrow: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
+};
+
 function rail(active) {
   const builds = state.builds.map((b) => `
     <a class="rail-link ${active === b.id ? 'is-active' : ''}" href="#/b/${b.id}">
@@ -138,43 +174,140 @@ function rail(active) {
     </a>`).join('');
   return `
   <nav class="rail" aria-label="Workspace">
-    <a class="brand" href="#/"><span class="brand-word">Berth</span><span class="mono dim">v0.1</span></a>
-    <a class="btn btn-outline rail-new" href="#/">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-      New build
-    </a>
+    <a class="brand" href="#/"><span class="brand-word">Berth</span><span class="mono dim">v0.2</span></a>
+    <a class="btn btn-outline rail-new" href="#/start">${ICON.plus} New build</a>
+    <a class="rail-link rail-home ${active === 'home' ? 'is-active' : ''}" href="#/">${ICON.home}Home</a>
     <div class="rail-group">
       <div class="eyebrow">Your builds</div>
       ${builds || '<p class="dim small pad8">Nothing built yet.</p>'}
     </div>
     <div class="rail-foot">
-      <a class="rail-link ${active === 'policy' ? 'is-active' : ''}" href="#/policy">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3z"/></svg>Governance policy</a>
-      <a class="rail-link ${active === 'audit' ? 'is-active' : ''}" href="#/audit">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>Audit log<span class="mono dim push">${state.audit.length}</span></a>
-      <a class="rail-link ${active === 'settings' ? 'is-active' : ''}" href="#/settings">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>Settings &amp; API keys</a>
+      <a class="rail-link ${active === 'policy' ? 'is-active' : ''}" href="#/policy">${ICON.shield}Governance policy</a>
+      <a class="rail-link ${active === 'audit' ? 'is-active' : ''}" href="#/audit">${ICON.list}Audit log<span class="mono dim push">${state.audit.length}</span></a>
+      <a class="rail-link ${active === 'settings' ? 'is-active' : ''}" href="#/settings">${ICON.gear}Settings &amp; API keys</a>
     </div>
   </nav>`;
 }
 
 function shell(active, main, aside = '') {
   app().innerHTML = `<div class="shell ${aside ? 'has-aside' : ''}">${rail(active)}<main class="main">${main}</main>${aside}</div>`;
+  $('.main')?.scrollTo(0, 0);
 }
 
 // ---------------------------------------------------------------------------
-// Home: choose a model, choose what to build
+// Landing page
 
-const pick = { modelId: null, type: null };
+function renderLanding() {
+  const examples = state.builds.filter((b) => b.templateKey);
+  shell('home', `
+  <div class="landing">
+    <section class="hero">
+      <div class="eyebrow">A governed AI workspace</div>
+      <h1>Build chatbots, agents and harnesses on seven models, with governance in every request.</h1>
+      <p class="lede">Berth lets a team choose the right model for each job, route work between cheap and strong models to control cost, and apply controls that match the risk of each use. Personal data is removed before any prompt leaves the browser, and every decision is logged.</p>
+      <div class="row wrap gap8">
+        <a class="btn btn-primary" href="#/start">Start building ${ICON.arrow}</a>
+        <a class="btn btn-outline" href="#/b/${examples[3]?.id || ''}">Open the harness example</a>
+      </div>
+    </section>
+
+    <section class="band">
+      <h2 class="section-title">How it works</h2>
+      <ol class="how">
+        <li><span class="how-no mono">1</span><div><strong>Say what you are building.</strong><p>A chatbot, an agent or a harness, and what it is for. The purpose and who uses it set the risk tier.</p></div></li>
+        <li><span class="how-no mono">2</span><div><strong>Assign models to roles.</strong><p>One model for a chatbot. For agents and harnesses, a cheap router sends simple requests to a fast model and complex ones to a strong model, and a reviewer from another vendor checks the result.</p></div></li>
+        <li><span class="how-no mono">3</span><div><strong>Use it with controls in force.</strong><p>Redaction, blocked terms, approval gates, output checks and an audit log apply to every request, and each answer shows its cost.</p></div></li>
+      </ol>
+    </section>
+
+    <section class="band">
+      <h2 class="section-title">Three things you can build</h2>
+      <div class="grid grid-3">
+        ${Object.entries(TYPES).map(([k, t]) => `
+          <a class="card type-card" href="#/start?type=${k}">
+            <span class="row between"><span class="type-name">${t.label}</span><span class="mono tiny tag">${esc(t.models)}</span></span>
+            <span class="type-line">${esc(t.line)}</span>
+            ${pipelineDiagram(k)}
+            <span class="small dim">For example: ${esc(t.example)}</span>
+          </a>`).join('')}
+      </div>
+    </section>
+
+    <section class="band split">
+      <div>
+        <h2 class="section-title">Why route between models</h2>
+        <p>Most requests to a workplace assistant are simple: a lookup, a rewrite, a single calculation. Sending all of them to the strongest model costs several times more than needed. Berth asks a cheap model to triage each request, sends simple ones to a fast model and keeps the strong model for work that needs it. Every answer shows its cost and what the same run would have cost on the strong model alone.</p>
+      </div>
+      <div class="cost-demo">
+        <div class="cost-row"><span>Strong model for every request</span><span class="bar"><span style="width:100%"></span></span><span class="mono">100%</span></div>
+        <div class="cost-row"><span>Routed: simple requests to a fast model</span><span class="bar"><span class="accent" style="width:42%"></span></span><span class="mono">~42%</span></div>
+        <p class="tiny dim">Illustration: 70% of requests simple, Gemini as the fast model, Claude as the strong model, Mistral as the router, at the default price estimates. Your savings depend on your mix of requests.</p>
+      </div>
+    </section>
+
+    <section class="band">
+      <h2 class="section-title">Governance built in</h2>
+      <div class="grid grid-4 feature-grid">
+        <div><strong>Redaction before sending</strong><p>Emails, phone numbers, card numbers, IBANs and tax file numbers are replaced with placeholders in the browser.</p></div>
+        <div><strong>Risk tiers</strong><p>Each build is classified under the EU AI Act by purpose and deployment context. The tier switches controls on.</p></div>
+        <div><strong>Human oversight</strong><p>High-risk answers are held until a person approves them. Harnesses can ask before each tool call.</p></div>
+        <div><strong>Audit log</strong><p>Every request, route, review, block and approval is recorded and exportable as CSV or JSON.</p></div>
+      </div>
+    </section>
+
+    <section class="band">
+      <h2 class="section-title">Governed examples</h2>
+      <p class="dim section-lede">One for each of four regulated industries. Open one, add an API key, and try it.</p>
+      <div class="grid grid-4">
+        ${examples.map((b) => {
+          const t = tmpl(b.templateKey);
+          return `<a class="card tpl-card" href="#/b/${b.id}">
+            <span class="row between"><span class="eyebrow">${esc(t.industry)}</span>${tierPlate(b.tier)}</span>
+            <span class="tpl-name">${esc(b.name)}</span>
+            <span class="small">${esc(b.purpose)}</span>
+            <span class="small dim">${esc(TYPES[b.type].label)} · ${modelsUsed(b).map((id) => esc(modelById(id).name)).join(', ')}</span>
+          </a>`;
+        }).join('')}
+      </div>
+    </section>
+
+    <footer class="landing-foot small dim">
+      Berth is a working prototype built as preparatory work for doctoral research on AI governance.
+      <a href="https://github.com/HackrLife/Berth" target="_blank" rel="noopener">Source on GitHub</a> ·
+      <a href="https://github.com/HackrLife/Berth/blob/main/PRD.md" target="_blank" rel="noopener">Product requirements</a>
+    </footer>
+  </div>`);
+}
+
+function pipelineDiagram(type) {
+  const node = (label, sub, cls = '') => `<span class="pnode ${cls}"><span>${label}</span><span class="mono tiny">${sub}</span></span>`;
+  const arrow = '<span class="parrow" aria-hidden="true">→</span>';
+  if (type === 'chatbot') return `<span class="pipe">${node('Model', 'answers')}</span>`;
+  const work = `<span class="pfork">${node('Fast', 'simple')}${node('Strong', 'complex')}</span>`;
+  if (type === 'agent') return `<span class="pipe">${node('Router', 'triage')}${arrow}${work}</span>`;
+  return `<span class="pipe">${node('Router', 'triage')}${arrow}${work}${arrow}${node('Reviewer', 'check')}${arrow}${node('Person', 'approve', 'pperson')}</span>`;
+}
+
+// ---------------------------------------------------------------------------
+// Builder: what are you building, then which models
+
+const pick = { type: null, modelId: null, models: {} };
+
+function modelOption(m, selected) {
+  const s = modelStatus(m);
+  return `<option value="${m.id}" ${selected === m.id ? 'selected' : ''} ${state.policy.allowedModels.includes(m.id) ? '' : 'disabled'}>${esc(m.name)} · ${esc(provenance(m))} · ${s.ok ? 'ready' : s.text.toLowerCase()}</option>`;
+}
 
 function modelCard(m) {
   const s = modelStatus(m);
   const sel = pick.modelId === m.id;
+  const p = priceOf(m.id);
   return `
     <button type="button" class="card model-card ${sel ? 'is-selected' : ''} ${s.ok ? '' : 'is-muted'}" data-action="pick-model" data-id="${m.id}" aria-pressed="${sel}">
       <span class="row between"><span class="model-name">${esc(m.name)}</span><span class="check" aria-hidden="true"></span></span>
       <span class="small dim">${esc(m.maker)}</span>
       <span class="mono tiny tag">${esc(provenance(m))}</span>
+      <span class="mono tiny dim">$${p.in} / $${p.out} per 1M tokens</span>
       <span class="small ${s.ok ? 'ok' : 'warn'}">${esc(s.text)}</span>
     </button>`;
 }
@@ -185,59 +318,77 @@ function typeCard(key) {
   return `
     <button type="button" class="card type-card ${sel ? 'is-selected' : ''}" data-action="pick-type" data-id="${key}" aria-pressed="${sel}">
       <span class="row between"><span class="type-name">${t.label}</span><span class="check" aria-hidden="true"></span></span>
+      <span class="mono tiny tag">${esc(t.models)}</span>
       <span class="type-line">${esc(t.line)}</span>
-      <span class="type-parts">${t.parts.map((p) => `<span>${esc(p)}</span>`).join('')}</span>
+      ${pipelineDiagram(key)}
     </button>`;
 }
 
-function renderHome() {
+function roleRows(models, type, idPrefix = 'role') {
+  return rolesFor(type).map((r) => {
+    const role = ROLES[r];
+    const p = priceOf(models[r]);
+    return `
+      <div class="role-row">
+        <div class="role-label"><span class="pill-stage mono tiny">${esc(role.stage)}</span><strong>${esc(role.label)}</strong><span class="small dim">${esc(role.blurb)}</span></div>
+        <div class="role-pick">
+          <select id="${idPrefix}-${r}" data-role="${r}" aria-label="${esc(role.label)}">${MODELS.map((m) => modelOption(m, models[r])).join('')}</select>
+          <span class="mono tiny dim">$${p.in} / $${p.out} per 1M</span>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function renderStart() {
   const anyKey = Object.values(state.keys).some(Boolean);
   const closed = MODELS.filter((m) => m.weights === 'closed');
   const open = MODELS.filter((m) => m.weights === 'open');
-  const ready = pick.modelId && pick.type;
-  const m = pick.modelId && modelById(pick.modelId);
+  const t = pick.type;
+  const ready = t === 'chatbot' ? Boolean(pick.modelId) : Boolean(t);
 
-  shell('home', `
-  <div class="page home">
-    <header class="page-head">
-      <h1>What will you build?</h1>
-      <p class="lede">Choose a model, then a chatbot, an agent or a harness. Every build is given a risk tier, and the tier decides its controls.</p>
-    </header>
-    ${anyKey ? '' : `<div class="notice">
-      <strong>Add an API key to start.</strong> Keys are stored only in this browser and sent only to their provider.
-      <a class="btn btn-small" href="#/settings">Add keys</a></div>`}
-
-    <section class="step">
-      <div class="step-head"><span class="step-no mono">1</span><h2>Choose a model</h2></div>
+  let step2 = '';
+  if (t === 'chatbot') {
+    step2 = `
+      <p class="small dim">A chatbot uses one model for every answer.</p>
       <div class="group-label">Closed weights</div>
       <div class="grid grid-4">${closed.map(modelCard).join('')}</div>
       <div class="group-label">Open weights <span class="dim">· through OpenRouter</span></div>
-      <div class="grid grid-4">${open.map(modelCard).join('')}</div>
-    </section>
+      <div class="grid grid-4">${open.map(modelCard).join('')}</div>`;
+  } else if (t) {
+    step2 = `
+      <p class="small dim">${t === 'agent'
+        ? 'The router reads each request and sends it to the fast or the strong model. Only the model that does the work uses tools.'
+        : 'Each request passes through triage, work and an independent review before any human approval. Choose a reviewer from a different vendor to the workers.'}</p>
+      ${pipelineDiagram(t)}
+      <div class="roles">${roleRows(pick.models, t, 'start')}</div>`;
+  }
+
+  shell('start', `
+  <div class="page">
+    <header class="page-head">
+      <h1>What are you building?</h1>
+      <p class="lede">Choose the kind of build first. It decides how many models take part and how they work together.</p>
+    </header>
+    ${anyKey ? '' : `<div class="notice">
+      <strong>Add an API key to run your builds.</strong> Keys are stored only in this browser and sent only to their provider.
+      <a class="btn btn-small" href="#/settings">Add keys</a></div>`}
 
     <section class="step">
-      <div class="step-head"><span class="step-no mono">2</span><h2>Choose what to build</h2></div>
+      <div class="step-head"><span class="step-no mono">1</span><h2>Choose a build type</h2></div>
       <div class="grid grid-3">${Object.keys(TYPES).map(typeCard).join('')}</div>
     </section>
 
+    ${t ? `<section class="step">
+      <div class="step-head"><span class="step-no mono">2</span><h2>${t === 'chatbot' ? 'Choose its model' : 'Assign models to roles'}</h2></div>
+      ${step2}
+    </section>` : ''}
+
     <div class="continue-bar">
-      <span class="small">${ready ? `${esc(TYPES[pick.type].label)} on <strong>${esc(m.name)}</strong> <span class="mono dim tiny">${esc(provenance(m))}</span>` : '<span class="dim">Pick a model and a build type.</span>'}</span>
+      <span class="small">${!t ? '<span class="dim">Choose a build type.</span>'
+        : t === 'chatbot' ? (pick.modelId ? `Chatbot on <strong>${esc(modelById(pick.modelId).name)}</strong>` : '<span class="dim">Choose a model.</span>')
+          : `${esc(TYPES[t].label)} · ${rolesFor(t).map((r) => `${ROLES[r].label}: <strong>${esc(modelById(pick.models[r]).name)}</strong>`).join(' · ')}`}</span>
       <button type="button" class="btn btn-primary" data-action="continue" ${ready ? '' : 'disabled'}>Continue</button>
     </div>
-
-    <section class="step">
-      <div class="step-head"><h2 class="h-small">Or open a governed example</h2></div>
-      <div class="grid grid-4">
-        ${state.builds.filter((b) => b.templateKey).map((b) => {
-          const t = tmpl(b.templateKey);
-          return `<a class="card tpl-card" href="#/b/${b.id}">
-            <span class="row between"><span class="eyebrow">${esc(t.industry)}</span>${tierPlate(b.tier)}</span>
-            <span class="tpl-name">${esc(b.name)}</span>
-            <span class="small dim">${esc(TYPES[b.type].label)} · ${esc(modelById(b.modelId).name)}</span>
-          </a>`;
-        }).join('')}
-      </div>
-    </section>
   </div>`);
 }
 
@@ -246,12 +397,14 @@ function renderHome() {
 
 let draft = null;
 
-function newDraft(modelId, type) {
+function newDraft(type, modelId, models) {
   return {
     id: null,
     name: '',
     type,
-    modelId,
+    modelId: type === 'chatbot' ? modelId : models.strong,
+    models: type === 'chatbot' ? {} : { ...models },
+    routing: true,
     purpose: '',
     usedBy: 'Internal team',
     instructions: '',
@@ -261,7 +414,7 @@ function newDraft(modelId, type) {
     protectedTerms: [],
     safeguards: {},
     chosenSafeguards: [],
-    harness: type === 'harness' ? { approval: false, fullLog: true, aiLabel: false, toolModes: {} } : undefined,
+    harness: type === 'harness' ? { approval: false, fullLog: true, aiLabel: false, review: true, retry: true, toolModes: {} } : undefined,
     maxSteps: 6,
     tier: null,
   };
@@ -282,9 +435,16 @@ function renderEditor() {
         <label class="field"><span>Name</span><input id="f-name" required value="${esc(d.name)}" placeholder="e.g. Supplier Contract Checker"></label>
         <label class="field"><span>Build type</span>
           <select id="f-type">${Object.entries(TYPES).map(([k, t]) => `<option value="${k}" ${d.type === k ? 'selected' : ''}>${t.label}</option>`).join('')}</select></label>
-        <label class="field"><span>Model</span>
-          <select id="f-model">${allowed.map((m) => `<option value="${m.id}" ${d.modelId === m.id ? 'selected' : ''}>${esc(m.name)} · ${esc(provenance(m))}</option>`).join('')}</select></label>
+        ${d.type === 'chatbot' ? `<label class="field"><span>Model</span>
+          <select id="f-model">${allowed.map((m) => `<option value="${m.id}" ${d.modelId === m.id ? 'selected' : ''}>${esc(m.name)} · ${esc(provenance(m))}</option>`).join('')}</select></label>` : ''}
       </div>
+      ${d.type !== 'chatbot' ? `
+      <fieldset class="fieldset">
+        <legend>Models</legend>
+        ${pipelineDiagram(d.type)}
+        <label class="check-row"><input type="checkbox" id="f-routing" ${d.routing !== false ? 'checked' : ''}> <span><strong>Route by difficulty</strong><br><span class="small dim">The router sends simple requests to the fast model. Turn off to send everything to the strong model.</span></span></label>
+        <div class="roles">${roleRows(d.models || defaultModels(d.type, d.modelId), d.type, 'f-role')}</div>
+      </fieldset>` : ''}
       <div class="field-row">
         <label class="field grow"><span>What is it for?</span><input id="f-purpose" value="${esc(d.purpose)}" placeholder="The job it does and for whom. This decides its risk tier."></label>
         <label class="field"><span>Used by</span>
@@ -318,13 +478,15 @@ function renderEditor() {
           <label class="check-row"><input type="checkbox" id="h-approval" ${d.harness?.approval ? 'checked' : ''}> <span><strong>Human approval</strong><br><span class="small dim">Hold every answer until a person approves it</span></span></label>
           <label class="check-row"><input type="checkbox" id="h-fulllog" ${d.harness?.fullLog ? 'checked' : ''}> <span><strong>Full record-keeping</strong><br><span class="small dim">Keep prompts and answers in the audit log</span></span></label>
           <label class="check-row"><input type="checkbox" id="h-label" ${d.harness?.aiLabel ? 'checked' : ''}> <span><strong>AI-generated label</strong><br><span class="small dim">Mark every answer as AI-generated</span></span></label>
+          <label class="check-row"><input type="checkbox" id="h-review" ${d.harness?.review !== false ? 'checked' : ''}> <span><strong>Independent review</strong><br><span class="small dim">The reviewer model checks every draft against the rules</span></span></label>
+          <label class="check-row"><input type="checkbox" id="h-retry" ${d.harness?.retry !== false ? 'checked' : ''}> <span><strong>Revise on review failure</strong><br><span class="small dim">One revision on the strong model when the reviewer finds issues</span></span></label>
           ${Object.entries(SAFEGUARD_LIBRARY).map(([k, s]) => `
             <label class="check-row"><input type="checkbox" name="safeguard" value="${k}" ${d.chosenSafeguards?.includes(k) ? 'checked' : ''}> <span><strong>${esc(s.label)}</strong><br><span class="small dim">${esc(s.detail)}</span></span></label>`).join('')}
         </div>
       </fieldset>` : ''}
 
       <div class="form-actions">
-        <a class="btn btn-ghost" href="${d.id ? `#/b/${d.id}` : '#/'}">Cancel</a>
+        <a class="btn btn-ghost" href="${d.id ? `#/b/${d.id}` : '#/start'}">Cancel</a>
         <button type="submit" class="btn btn-primary">Check risk and save</button>
       </div>
     </form>
@@ -335,7 +497,13 @@ function readEditor() {
   const d = draft;
   d.name = $('#f-name').value.trim();
   d.type = $('#f-type').value;
-  d.modelId = $('#f-model').value;
+  if ($('#f-model')) d.modelId = $('#f-model').value;
+  if (document.querySelector('[data-role]')) {
+    d.models = {};
+    document.querySelectorAll('select[data-role]').forEach((sel) => { d.models[sel.dataset.role] = sel.value; });
+    d.routing = $('#f-routing')?.checked ?? true;
+    if (d.models.strong) d.modelId = d.models.strong;
+  }
   d.purpose = $('#f-purpose').value.trim();
   d.usedBy = $('#f-usedby').value;
   d.instructions = $('#f-instructions').value.trim();
@@ -353,6 +521,8 @@ function readEditor() {
     d.harness.approval = $('#h-approval')?.checked ?? false;
     d.harness.fullLog = $('#h-fulllog')?.checked ?? true;
     d.harness.aiLabel = $('#h-label')?.checked ?? false;
+    d.harness.review = $('#h-review')?.checked ?? true;
+    d.harness.retry = $('#h-retry')?.checked ?? true;
     d.harness.toolModes = {};
     document.querySelectorAll('.tool-mode').forEach((s) => { d.harness.toolModes[s.dataset.tool] = s.value; });
     d.chosenSafeguards = [...document.querySelectorAll('input[name="safeguard"]:checked')].map((i) => i.value);
@@ -499,13 +669,16 @@ function messageHtml(msg, i, build, isLast) {
   }
   const c = controlsFor(build);
   const held = msg.status === 'held';
-  const m = modelById(msg.modelId || build.modelId);
+  const worker = [...(msg.stages || [])].reverse().find((st) => st.role === 'fast' || st.role === 'strong' || st.role === 'model');
+  const m = modelById(worker?.modelId || msg.modelId || build.modelId);
   return `
   <div class="msg msg-assistant ${held ? 'is-held' : ''} ${msg.status === 'rejected' ? 'is-rejected' : ''}" data-index="${i}">
     <div class="msg-meta"><strong>${esc(build.name)}</strong> · ${esc(m?.name || '')} ${msg.at ? `· ${new Date(msg.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}
       ${c.aiLabel && msg.status !== 'streaming' ? '<span class="ai-label">AI-generated</span>' : ''}</div>
+    ${msg.stages?.length && build.type !== 'chatbot' ? stageStrip(msg.stages) : ''}
     ${msg.steps?.length ? `<div class="steps">${msg.steps.map((s) => `<div class="step-line"><span class="mono tiny">${esc(s.name)}</span> ${esc(s.summary || '')}</div>`).join('')}</div>` : ''}
     <div class="answer">${msg.content ? renderMarkdown(msg.content) : '<span class="thinking">Thinking…</span>'}</div>
+    ${msg.review?.issues?.length ? `<div class="review ${msg.review.verdict === 'pass' ? 'review-pass' : ''}"><span class="mono tiny">REVIEWER · ${esc(modelById(build.models?.reviewer)?.name || '')}</span><ul>${msg.review.issues.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
     ${msg.notes?.length ? `<div class="notes">${msg.notes.map((n) => `<div class="note note-${n.level}">${esc(n.text)}</div>`).join('')}</div>` : ''}
     ${held ? `
       <div class="hold-bar" role="status">
@@ -520,9 +693,19 @@ function messageHtml(msg, i, build, isLast) {
       <button type="button" class="link-btn" data-action="copy" data-index="${i}" ${held || msg.status === 'rejected' ? 'disabled' : ''}>Copy</button>
       ${isLast ? '<button type="button" class="link-btn" data-action="regenerate">Regenerate</button>' : ''}
       ${msg.auditSeq ? `<span class="mono tiny dim">LOG #${String(msg.auditSeq).padStart(4, '0')}</span>` : ''}
-      ${msg.tokens ? `<span class="mono tiny dim">${msg.tokens} tokens</span>` : ''}
+      ${msg.tokens ? `<span class="mono tiny dim">${msg.tokens.toLocaleString()} tokens${msg.estimated ? ' (est.)' : ''}</span>` : ''}
+      ${msg.cost != null ? `<span class="mono tiny cost">${formatCost(msg.cost)}${msg.baseline > msg.cost * 1.05 ? ` · strong-only ${formatCost(msg.baseline)} · saved ${Math.round((1 - msg.cost / msg.baseline) * 100)}%` : ''}</span>` : ''}
     </div>` : ''}
   </div>`;
+}
+
+function stageStrip(stages) {
+  return `<div class="stages">${stages.map((st, i) => `
+    ${i ? '<span class="parrow" aria-hidden="true">→</span>' : ''}
+    <span class="stage stage-${st.role} ${st.status === 'running' ? 'is-running' : ''}">
+      <span class="stage-top"><span class="mono tiny">${esc(st.stage.toUpperCase())}</span><strong>${esc(modelById(st.modelId)?.name || '')}</strong></span>
+      <span class="tiny dim">${st.status === 'running' ? 'working…' : esc(st.note || (st.usage ? `${(st.usage.in + st.usage.out).toLocaleString()} tok` : ''))}${st.cost ? ` · ${formatCost(st.cost)}` : ''}</span>
+    </span>`).join('')}</div>`;
 }
 
 function shieldIcon() { return '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3z"/></svg>'; }
@@ -542,6 +725,15 @@ function governancePanel(build) {
       <div class="scale">${tierOrder.map((t) => `<span class="${t === build.tier ? `on on-${t}` : ''}"></span>`).join('')}</div>
       <div class="scale-labels mono">${tierOrder.map((t) => `<span class="${t === build.tier ? 'cur' : ''}">${TIERS[t].label.toUpperCase()}</span>`).join('')}</div>
     </div>
+    ${build.type !== 'chatbot' ? `<div class="controls">
+      <div class="h-sub">Models</div>
+      ${rolesFor(build.type).map((r) => {
+        const mid = build.models?.[r];
+        const off = r === 'router' && build.routing === false;
+        return `<div class="role-line ${off ? 'is-off' : ''}"><span class="small">${esc(ROLES[r].label)}</span><span class="small"><strong>${esc(modelById(mid)?.name || '')}</strong> <span class="mono tiny dim">${hasKey(mid) ? '' : 'no key'}${off ? 'off' : ''}</span></span></div>`;
+      }).join('')}
+      ${build.type === 'harness' && build.harness?.review !== false && build.models?.reviewer && [build.models.fast, build.models.strong].some((w) => modelById(w)?.maker === modelById(build.models.reviewer)?.maker) ? '<p class="tiny warn">The reviewer shares a vendor with a worker, so the review is less independent.</p>' : ''}
+    </div>` : ''}
     <div class="controls">
       <div class="h-sub">Controls in force</div>
       ${describeControls(build).map((c) => `
@@ -576,8 +768,8 @@ function renderRun(id) {
       <div class="run-tools">
         <label class="inline-select"><span class="small dim">Used by</span>
           <select id="run-usedby">${USED_BY.map((u) => `<option ${build.usedBy === u ? 'selected' : ''}>${esc(u)}</option>`).join('')}</select></label>
-        <label class="inline-select"><span class="small dim">Model</span>
-          <select id="run-model">${MODELS.filter((x) => state.policy.allowedModels.includes(x.id)).map((x) => `<option value="${x.id}" ${x.id === build.modelId ? 'selected' : ''}>${esc(x.name)} · ${esc(provenance(x))}</option>`).join('')}</select></label>
+        ${build.type === 'chatbot' ? `<label class="inline-select"><span class="small dim">Model</span>
+          <select id="run-model">${MODELS.filter((x) => state.policy.allowedModels.includes(x.id)).map((x) => `<option value="${x.id}" ${x.id === build.modelId ? 'selected' : ''}>${esc(x.name)} · ${esc(provenance(x))}</option>`).join('')}</select></label>` : ''}
         <a class="btn btn-small btn-outline" href="#/edit/${build.id}">Edit</a>
       </div>
     </header>
@@ -603,7 +795,9 @@ function renderRun(id) {
           </button>
         </div>
       </form>
-      <div class="mono tiny dim composer-foot">${esc(m.name)} · ${esc(provenance(m))} · ${hasKey(m.id) ? 'key set' : '<a href="#/settings">add API key</a>'}</div>
+      <div class="mono tiny dim composer-foot">${build.type === 'chatbot'
+        ? `${esc(m.name)} · ${esc(provenance(m))} · ${hasKey(m.id) ? 'key set' : '<a href="#/settings">add API key</a>'}`
+        : `${modelsUsed(build).map((id) => esc(modelById(id).name)).join(' · ')} · ${modelsUsed(build).every(hasKey) ? 'keys set' : '<a href="#/settings">add missing API keys</a>'}`}</div>
     </div>
   </div>`, governancePanel(build));
 
@@ -661,7 +855,8 @@ async function send(build, text, { regenerate = false } = {}) {
   const c = controlsFor(build);
 
   if (!regenerate) {
-    const policy = checkPolicy(text, build.modelId);
+    const blockedModel = modelsUsed(build).find((id) => !state.policy.allowedModels.includes(id));
+    const policy = checkPolicy(text, blockedModel || build.modelId);
     if (!policy.ok) {
       chat.push({ role: 'system', status: 'blocked', content: `Not sent. ${policy.reason}` });
       audit({ event: 'Message blocked', buildId: build.id, build: build.name, type: build.type, tier: build.tier, model: build.modelId, outcome: 'blocked by policy', actor: 'Berth', detail: policy.reason });
@@ -691,26 +886,25 @@ async function send(build, text, { regenerate = false } = {}) {
 
   const toolNames = build.type === 'chatbot' ? [] : (build.tools || []).filter((k) => build.harness?.toolModes?.[k] !== 'off');
   let result;
+  let pending = 0;
+  const paint = () => {
+    if (pending) return;
+    pending = requestAnimationFrame(() => {
+      pending = 0;
+      const el = document.querySelector(`.msg-assistant[data-index="${chat.indexOf(reply)}"] .answer`);
+      if (el) el.innerHTML = reply.content ? renderMarkdown(reply.content) : '<span class="thinking">Thinking…</span>';
+      const box = $('#messages'); if (box) box.scrollTop = box.scrollHeight;
+    });
+  };
   try {
-    let pending = 0;
-    result = await runTurn({
-      modelId: build.modelId,
+    result = await execute(build, {
       system: systemPrompt(build),
       history,
       tools: toolDefs(toolNames),
-      maxSteps: build.maxSteps || 6,
+      rulesText: describeControls(build).filter((x) => x.on).map((x) => `- ${x.title}: ${x.detail}`).join('\n'),
       signal: run.controller.signal,
-      onText: (t) => {
-        reply.content = t;
-        if (!pending) {
-          pending = requestAnimationFrame(() => {
-            pending = 0;
-            const el = document.querySelector(`.msg-assistant[data-index="${chat.indexOf(reply)}"] .answer`);
-            if (el) el.innerHTML = renderMarkdown(reply.content);
-            const box = $('#messages'); if (box) box.scrollTop = box.scrollHeight;
-          });
-        }
-      },
+      onText: (t) => { reply.content = t; paint(); },
+      onStage: (stages) => { reply.stages = stages.map((st) => ({ ...st })); refreshMessages(build); },
       onToolCall: async (call) => {
         const [key, tool] = toolByFunctionName(call.name) || [];
         if (!tool || !toolNames.includes(key)) throw new Error(`Tool ${call.name} is not available to this build.`);
@@ -722,7 +916,13 @@ async function send(build, text, { regenerate = false } = {}) {
       },
     });
     reply.content = result.text || '(No answer returned.)';
+    reply.stages = result.stages;
+    reply.review = result.review;
+    reply.cost = result.cost;
+    reply.baseline = result.baseline;
+    reply.estimated = result.estimated;
     reply.notes = checkOutput(reply.content, c);
+    if (result.review?.verdict === 'revise') reply.notes.push({ level: 'block', text: 'The reviewer still found issues after one revision. Check them before approving.' });
     if (result.stepLimitHit) reply.notes.push({ level: 'warn', text: `Step limit of ${build.maxSteps} reached. The answer may be incomplete.` });
     reply.status = c.approval ? 'held' : 'ok';
   } catch (err) {
@@ -735,8 +935,9 @@ async function send(build, text, { regenerate = false } = {}) {
     }
   }
 
-  const tokensIn = estimateTokens(systemPrompt(build) + history.map((h) => h.content).join(' '));
-  const tokensOut = estimateTokens(reply.content);
+  const stages = reply.stages || [];
+  const tokensIn = stages.reduce((n, st) => n + (st.usage?.in || 0), 0) || estimateTokens(systemPrompt(build) + history.map((h) => h.content).join(' '));
+  const tokensOut = stages.reduce((n, st) => n + (st.usage?.out || 0), 0) || estimateTokens(reply.content);
   reply.tokens = tokensIn + tokensOut;
   const rec = audit({
     event: regenerate ? 'Answer regenerated' : 'Message sent',
@@ -744,14 +945,17 @@ async function send(build, text, { regenerate = false } = {}) {
     build: build.name,
     type: build.type,
     tier: build.tier,
-    model: `${build.modelId} (${result?.resolved?.model || resolve(build.modelId).model})`,
+    model: stages.length ? stages.map((st) => `${st.stage}:${st.modelId}`).join(' > ') : build.modelId,
     outcome: reply.status === 'error' ? 'error' : reply.status === 'held' ? 'held for approval' : 'sent',
     redactions: describeCounts(summarise(lastUser?.findings || [])) || 'none',
     tokensIn,
     tokensOut,
+    cost: reply.cost != null ? Number(reply.cost.toFixed(6)) : '',
     actor: 'User',
     detail: [
-      reply.steps.length ? `tools: ${reply.steps.map((s) => s.name).join(', ')}` : '',
+      stages.find((st) => st.stage === 'Triage')?.note ? `route: ${stages.find((st) => st.stage === 'Triage').note}` : '',
+      result?.review ? `review: ${result.review.verdict}${result.review.issues.length ? ` (${result.review.issues.join('; ')})` : ''}` : '',
+      reply.steps.length ? `tools: ${reply.steps.map((st) => st.name).join(', ')}` : '',
       reply.notes?.length ? `checks: ${reply.notes.map((n) => n.text).join(' | ')}` : '',
       reply.error || '',
       c.fullLog ? `prompt: ${lastUser?.sent || ''} || answer: ${reply.content}` : '',
@@ -808,7 +1012,7 @@ function renderAudit() {
     </header>
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>#</th><th>Time</th><th>Event</th><th>Build</th><th>Tier</th><th>Model</th><th>Outcome</th><th>Redactions</th><th>Tokens</th></tr></thead>
+        <thead><tr><th>#</th><th>Time</th><th>Event</th><th>Build</th><th>Tier</th><th>Models</th><th>Outcome</th><th>Redactions</th><th>Tokens</th><th>Cost</th></tr></thead>
         <tbody>${rows.length ? rows.map((r) => `
           <tr title="${esc(r.detail || '')}">
             <td class="mono">${String(r.seq).padStart(4, '0')}</td>
@@ -818,10 +1022,11 @@ function renderAudit() {
             <td class="mono small">${esc(r.model || '')}</td><td>${esc(r.outcome || '')}</td>
             <td class="small">${esc(r.redactions || '')}</td>
             <td class="mono small">${r.tokensIn ? `${r.tokensIn} / ${r.tokensOut}` : ''}</td>
-          </tr>`).join('') : '<tr><td colspan="9" class="dim">No activity yet. Open a build and send a message.</td></tr>'}</tbody>
+            <td class="mono small">${r.cost !== '' && r.cost != null ? formatCost(Number(r.cost)) : ''}</td>
+          </tr>`).join('') : '<tr><td colspan="10" class="dim">No activity yet. Open a build and send a message.</td></tr>'}</tbody>
       </table>
     </div>
-    <p class="small dim">Token counts are estimates (about four characters per token). Hover a row for details.</p>
+    <p class="small dim">Tokens are as reported by each provider, or estimated at about four characters per token for streamed answers. Costs use the price estimates in Settings. Hover a row for details.</p>
   </div>`);
 }
 
@@ -869,6 +1074,19 @@ function renderSettings() {
           <span class="small dim" id="load-${prov}"></span>
         </fieldset>`;
       }).join('')}
+      <fieldset class="fieldset">
+        <legend>Price estimates</legend>
+        <p class="small dim">US dollars per million tokens, used to show the cost of each answer and the saving from routing. Check your provider's current pricing and adjust.</p>
+        <div class="price-grid">
+          <span class="tiny dim">Model</span><span class="tiny dim">Input</span><span class="tiny dim">Output</span>
+          ${MODELS.map((m) => {
+            const p = priceOf(m.id);
+            return `<span class="small"><strong>${esc(m.name)}</strong></span>
+              <input type="number" step="0.01" min="0" data-price="${m.id}" data-dir="in" value="${p.in}" aria-label="${esc(m.name)} input price">
+              <input type="number" step="0.01" min="0" data-price="${m.id}" data-dir="out" value="${p.out}" aria-label="${esc(m.name)} output price">`;
+          }).join('')}
+        </div>
+      </fieldset>
       <div class="form-actions">
         <button type="button" class="btn btn-quiet-danger" data-action="reset">Clear all Berth data</button>
         <button type="submit" class="btn btn-primary">Save settings</button>
@@ -881,8 +1099,13 @@ function renderSettings() {
 // Router
 
 function route() {
-  const parts = location.hash.replace(/^#\/?/, '').split('/');
-  const [page, id] = parts;
+  const [path, query = ''] = location.hash.replace(/^#\/?/, '').split('?');
+  const [page, id] = path.split('/');
+  if (page === 'start') {
+    const t = new URLSearchParams(query).get('type');
+    if (t && TYPES[t] && pick.type !== t) setPickType(t);
+    return renderStart();
+  }
   if (page === 'b' && id) return renderRun(id);
   if (page === 'edit' && id) {
     const b = buildById(id);
@@ -898,7 +1121,16 @@ function route() {
   if (page === 'audit') return renderAudit();
   if (page === 'policy') return renderPolicy();
   if (page === 'settings') return renderSettings();
-  return renderHome();
+  return renderLanding();
+}
+
+function setPickType(type) {
+  pick.type = type;
+  if (type !== 'chatbot') {
+    const base = defaultModels(type, pick.models.strong || 'claude');
+    pick.models = { ...base, ...pick.models };
+    if (type === 'harness' && !pick.models.reviewer) pick.models.reviewer = base.reviewer;
+  }
 }
 
 window.addEventListener('hashchange', route);
@@ -913,10 +1145,10 @@ document.addEventListener('click', async (e) => {
   const currentBuild = () => buildById(location.hash.split('/')[2]);
 
   switch (action) {
-    case 'pick-model': pick.modelId = el.dataset.id; renderHome(); break;
-    case 'pick-type': pick.type = el.dataset.id; renderHome(); break;
+    case 'pick-model': pick.modelId = el.dataset.id; renderStart(); break;
+    case 'pick-type': setPickType(el.dataset.id); renderStart(); break;
     case 'continue':
-      draft = newDraft(pick.modelId, pick.type);
+      draft = newDraft(pick.type, pick.modelId, pick.models);
       location.hash = '#/new';
       break;
     case 'close-dialog': $('#dialog').close(); break;
@@ -997,6 +1229,11 @@ document.addEventListener('submit', (e) => {
       const v = i.value.trim();
       if (v) state.modelIds[i.dataset.modelId] = v; else delete state.modelIds[i.dataset.modelId];
     });
+    form.querySelectorAll('[data-price]').forEach((i) => {
+      const id = i.dataset.price;
+      state.prices[id] = state.prices[id] || { ...priceOf(id) };
+      state.prices[id][i.dataset.dir] = Math.max(0, Number(i.value) || 0);
+    });
     const gr = $('#grok-route');
     if (gr) state.grokRoute = gr.value;
     save();
@@ -1019,6 +1256,11 @@ document.addEventListener('keydown', (e) => {
 });
 
 document.addEventListener('change', (e) => {
+  if (e.target.matches('select[data-role]') && e.target.id.startsWith('start-')) {
+    pick.models[e.target.dataset.role] = e.target.value;
+    renderStart();
+    return;
+  }
   const b = buildById(location.hash.split('/')[2]);
   if (e.target.id === 'run-usedby' && b) changeUsedBy(b, e.target.value);
   if (e.target.id === 'run-model' && b) {
@@ -1032,7 +1274,11 @@ document.addEventListener('change', (e) => {
     readEditor();
     draft.type = e.target.value;
     if (draft.type !== 'chatbot' && !draft.tools.length) draft.tools = ['calculator', 'knowledge'];
-    if (draft.type === 'harness' && !draft.harness) draft.harness = { approval: false, fullLog: true, aiLabel: false, toolModes: {} };
+    if (draft.type === 'harness' && !draft.harness) draft.harness = { approval: false, fullLog: true, aiLabel: false, review: true, retry: true, toolModes: {} };
+    if (draft.type !== 'chatbot') {
+      const base = defaultModels(draft.type, draft.modelId);
+      draft.models = { ...base, ...(draft.models || {}) };
+    }
     renderEditor();
   }
 });

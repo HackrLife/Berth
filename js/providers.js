@@ -115,7 +115,7 @@ const anthropic = {
     const j = await res.json();
     const text = j.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
     const calls = j.content.filter((b) => b.type === 'tool_use').map((b) => ({ id: b.id, name: b.name, args: b.input || {} }));
-    return { text, calls, assistant: { role: 'assistant', content: j.content }, usage: j.usage };
+    return { text, calls, assistant: { role: 'assistant', content: j.content }, usage: { in: j.usage?.input_tokens || 0, out: j.usage?.output_tokens || 0 } };
   },
   results(calls, outputs) {
     return [{
@@ -178,7 +178,7 @@ const openai = {
     });
     const assistant = { role: 'assistant', content: msg.content ?? null };
     if (msg.tool_calls?.length) assistant.tool_calls = msg.tool_calls;
-    return { text: msg.content || '', calls, assistant, usage: j.usage };
+    return { text: msg.content || '', calls, assistant, usage: { in: j.usage?.prompt_tokens || 0, out: j.usage?.completion_tokens || 0 } };
   },
   results(calls, outputs) {
     return calls.map((c, i) => ({ role: 'tool', tool_call_id: c.id, content: String(outputs[i]) }));
@@ -233,7 +233,7 @@ const gemini = {
     const calls = parts.filter((p) => p.functionCall).map((p, i) => ({
       id: `${p.functionCall.name}_${i}`, name: p.functionCall.name, args: p.functionCall.args || {},
     }));
-    return { text, calls, assistant: { role: 'model', parts }, usage: j.usageMetadata };
+    return { text, calls, assistant: { role: 'model', parts }, usage: { in: j.usageMetadata?.promptTokenCount || 0, out: (j.usageMetadata?.candidatesTokenCount || 0) + (j.usageMetadata?.thoughtsTokenCount || 0) } };
   },
   results(calls, outputs) {
     return [{
@@ -270,31 +270,38 @@ const ADAPTERS = { anthropic, openai, gemini };
 // ---------------------------------------------------------------------------
 // Public API
 
+const estimate = (text) => Math.ceil((text || '').length / 4);
+
 /**
  * Run one assistant turn.
  * - Without tools the answer streams through `onText`.
  * - With tools the model may call them up to `maxSteps` times; each call goes
  *   through `onToolCall(call)` which returns the tool's output (or throws).
+ * Returns the text, tool steps and token usage ({ in, out, estimated }).
  */
 export async function runTurn({ modelId, system, history, tools = [], maxSteps = 6, onText, onToolCall, signal }) {
   const r = resolve(modelId);
   if (!r.key) {
-    throw new ProviderError(`No API key for ${r.provider}.`, 'Add it in Settings. Keys stay in this browser.');
+    throw new ProviderError(`No API key for ${r.provider} (needed for ${r.entry.name}).`, 'Add it in Settings. Keys stay in this browser.');
   }
   const a = ADAPTERS[r.format];
   const native = a.toNative(history, system);
 
   if (!tools.length) {
     const text = await a.stream(r, { system, native, onText, signal });
-    return { text, steps: [], resolved: r };
+    const usage = { in: estimate(system + history.map((h) => h.content).join(' ')), out: estimate(text), estimated: true };
+    return { text, steps: [], resolved: r, usage };
   }
 
   const steps = [];
+  const usage = { in: 0, out: 0 };
+  const add = (u) => { usage.in += u?.in || 0; usage.out += u?.out || 0; };
   for (let i = 0; i < maxSteps; i++) {
     const out = await a.call(r, { system, native, tools, signal });
+    add(out.usage);
     if (!out.calls.length) {
       onText?.(out.text);
-      return { text: out.text, steps, resolved: r };
+      return { text: out.text, steps, resolved: r, usage };
     }
     native.push(out.assistant);
     const outputs = [];
@@ -315,18 +322,26 @@ export async function runTurn({ modelId, system, history, tools = [], maxSteps =
     ? { role: 'user', parts: [{ text: 'Step limit reached. Give your best final answer now without using tools.' }] }
     : { role: 'user', content: 'Step limit reached. Give your best final answer now without using tools.' });
   const final = await a.call(r, { system, native, tools: [], signal });
+  add(final.usage);
   onText?.(final.text);
-  return { text: final.text, steps, resolved: r, stepLimitHit: true };
+  return { text: final.text, steps, resolved: r, usage, stepLimitHit: true };
 }
 
-/** Single non-streaming completion, used for risk classification. */
+/** Single non-streaming completion, used for routing, review and classification. */
 export async function complete({ modelId, system, prompt, signal }) {
   const r = resolve(modelId);
-  if (!r.key) throw new ProviderError(`No API key for ${r.provider}.`, 'Add it in Settings.');
+  if (!r.key) throw new ProviderError(`No API key for ${r.provider} (needed for ${r.entry.name}).`, 'Add it in Settings.');
   const a = ADAPTERS[r.format];
   const native = a.toNative([{ role: 'user', content: prompt }], system);
   const out = await a.call(r, { system, native, tools: [], signal });
-  return out.text;
+  return { text: out.text, usage: out.usage, resolved: r };
+}
+
+/** Parse the first JSON object in a model reply. */
+export function parseJson(text) {
+  const m = String(text || '').match(/\{[\s\S]*\}/);
+  if (!m) throw new Error('The model did not return JSON.');
+  return JSON.parse(m[0]);
 }
 
 /** List the model ids a provider currently offers. */

@@ -2,7 +2,7 @@
 // The model proposes a tier; a person confirms it; this table decides the
 // controls. Classification is model-assisted, enforcement is deterministic.
 
-import { complete } from './providers.js';
+import { complete, parseJson } from './providers.js';
 
 export const TIERS = {
   minimal: { label: 'Minimal', short: 'MIN', order: 0, summary: 'No specific obligations under the EU AI Act.' },
@@ -80,10 +80,8 @@ Type: ${build.type}
 Intended purpose: ${build.purpose || '(not stated)'}
 Used by: ${build.usedBy}
 Instructions (excerpt): ${(build.instructions || '').slice(0, 1500)}`;
-  const text = await complete({ modelId: build.modelId, system: CLASSIFIER_SYSTEM, prompt });
-  const match = text.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error('The model did not return a classification.');
-  const j = JSON.parse(match[0]);
+  const { text } = await complete({ modelId: build.modelId, system: CLASSIFIER_SYSTEM, prompt });
+  const j = parseJson(text);
   const tier = String(j.tier || '').toLowerCase();
   if (!TIERS[tier]) throw new Error(`Unrecognised tier "${j.tier}".`);
   return { tier, basis: j.basis || '', rationale: j.rationale || '' };

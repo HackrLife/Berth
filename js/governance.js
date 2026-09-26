@@ -190,7 +190,7 @@ export function estimateTokens(text) {
 }
 
 export function auditToCsv(rows) {
-  const cols = ['seq', 'at', 'event', 'build', 'type', 'tier', 'model', 'outcome', 'redactions', 'tokensIn', 'tokensOut', 'actor', 'detail'];
+  const cols = ['seq', 'at', 'event', 'build', 'type', 'tier', 'model', 'outcome', 'redactions', 'tokensIn', 'tokensOut', 'cost', 'actor', 'detail'];
   const esc = (v) => {
     const s = v == null ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v);
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
