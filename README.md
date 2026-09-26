@@ -4,7 +4,7 @@
 
 Berth is a small, working prototype built as preparatory work for doctoral research on AI governance. The question it makes concrete is how obligations usually written as policy or regulation can be implemented as product behaviour that a person meets while working.
 
-**Live demo:** https://hackrlife.github.io/berth/
+**Live demo:** https://hackrlife.github.io/Berth/
 **Product requirements:** [PRD.md](PRD.md)
 
 ---
@@ -39,8 +39,8 @@ Try this: open **Contract Reviewer** and change *Used by* to *Court or tribunal*
 Berth is a static site with no build step and no server.
 
 ```bash
-git clone https://github.com/HackrLife/berth.git
-cd berth
+git clone https://github.com/HackrLife/Berth.git
+cd Berth
 python3 -m http.server 8000   # any static server works
 # open http://localhost:8000
 ```
