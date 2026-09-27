@@ -203,7 +203,7 @@ function renderLanding() {
   <div class="landing">
     <section class="hero">
       <div class="eyebrow">A governed AI workspace</div>
-      <h1>Build chatbots, agents and harnesses on seven models, with governance in every request.</h1>
+      <h1>Multi-model agentic AI with governance and compliance logs.</h1>
       <p class="lede">Berth lets a team choose the right model for each job, route work between cheap and strong models to control cost, and apply controls that match the risk of each use. Personal data is removed before any prompt leaves the browser, and every decision is logged.</p>
       <div class="row wrap gap8">
         <a class="btn btn-primary" href="#/start">Start building ${ICON.arrow}</a>
