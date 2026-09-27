@@ -24,6 +24,25 @@ Berth is a small, working prototype built as preparatory work for doctoral resea
    - Every answer shows its pipeline (which model did which stage), its token use and cost, and what the same run would have cost on the strong model alone.
    - Every request, route, review, block, approval and tier decision goes into an audit log you can export as CSV or JSON.
 
+## How it works: architecture patterns
+
+The site's **How it works** page documents ten industry-agnostic patterns, each with an architecture diagram in one shared notation (models, tools, governance checkpoints, decisions, people and audit records):
+
+| Group | Pattern | In Berth today |
+|---|---|---|
+| Agents | Single model | Runs |
+| Agents | Routed (router, fast and strong models) | Runs |
+| Agents | Cascade (fast first, escalate on failure) | Reference design |
+| Agents | Tool loop | Runs |
+| Agents | Orchestrator and workers | Reference design |
+| Harnesses | Review and revise (independent reviewer) | Runs |
+| Harnesses | Approval-gated | Runs |
+| Harnesses | Consensus (two vendors and a judge) | Reference design |
+| Foundations | Router | Runs |
+| Foundations | Governance layer | Runs |
+
+Each pattern links directly, for example `#/how/routed`.
+
 ## Governed examples
 
 | Example | Industry | Type | Tier | Safeguards |
@@ -59,6 +78,7 @@ js/models.js        the seven-model catalogue
 js/providers.js     three API adapters (Anthropic, OpenAI-compatible, Gemini), streaming and tool loops
 js/governance.js    redaction, policy checks, pre-send guards, output checks, audit log
 js/pipeline.js      multi-model execution: routing, review, revision, cost per stage
+js/diagrams.js      architecture patterns and the SVG diagram renderer
 js/risk.js          risk tiers, tier-to-control mapping, model-assisted classification
 js/tools.js         browser-safe agent tools
 js/templates.js     the four governed examples

@@ -12,6 +12,7 @@ import {
 import { TIERS, USED_BY, controlsFor, describeControls, classify } from './risk.js';
 import { TOOLS, toolDefs, toolByFunctionName } from './tools.js';
 import { TEMPLATES } from './templates.js';
+import { PATTERNS, renderDiagram, renderLegend } from './diagrams.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -163,6 +164,7 @@ const ICON = {
   shield: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3z"/></svg>',
   list: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>',
   gear: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>',
+  map: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="6" height="5" rx="1"/><rect x="15" y="4" width="6" height="5" rx="1"/><rect x="9" y="15" width="6" height="5" rx="1"/><path d="M9 6.5h6M6 9v3.5h12V9M12 12.5V15"/></svg>',
   arrow: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
 };
 
@@ -177,6 +179,7 @@ function rail(active) {
     <a class="brand" href="#/"><span class="brand-word">Berth</span><span class="mono dim">v0.2</span></a>
     <a class="btn btn-outline rail-new" href="#/start">${ICON.plus} New build</a>
     <a class="rail-link rail-home ${active === 'home' ? 'is-active' : ''}" href="#/">${ICON.home}Home</a>
+    <a class="rail-link rail-how ${active === 'how' ? 'is-active' : ''}" href="#/how">${ICON.map}How it works</a>
     <div class="rail-group">
       <div class="eyebrow">Your builds</div>
       ${builds || '<p class="dim small pad8">Nothing built yet.</p>'}
@@ -207,7 +210,7 @@ function renderLanding() {
       <p class="lede">Berth lets a team choose the right model for each job, route work between cheap and strong models to control cost, and apply controls that match the risk of each use. Personal data is removed before any prompt leaves the browser, and every decision is logged.</p>
       <div class="row wrap gap8">
         <a class="btn btn-primary" href="#/start">Start building ${ICON.arrow}</a>
-        <a class="btn btn-outline" href="#/b/${examples[3]?.id || ''}">Open the harness example</a>
+        <a class="btn btn-outline" href="#/how">How it works</a>
       </div>
     </section>
 
@@ -286,6 +289,50 @@ function pipelineDiagram(type) {
   const work = `<span class="pfork">${node('Fast', 'simple')}${node('Strong', 'complex')}</span>`;
   if (type === 'agent') return `<span class="pipe">${node('Router', 'triage')}${arrow}${work}</span>`;
   return `<span class="pipe">${node('Router', 'triage')}${arrow}${work}${arrow}${node('Reviewer', 'check')}${arrow}${node('Person', 'approve', 'pperson')}</span>`;
+}
+
+// ---------------------------------------------------------------------------
+// How it works: architecture patterns
+
+function renderHow(id) {
+  const p = PATTERNS.find((x) => x.id === id) || PATTERNS[0];
+  const groups = [...new Set(PATTERNS.map((x) => x.group))];
+  shell('how', `
+  <div class="how-page">
+    <aside class="how-tabs" aria-label="Patterns">
+      ${groups.map((g) => `
+        <div class="how-group">
+          <div class="eyebrow">${esc(g)}</div>
+          ${PATTERNS.filter((x) => x.group === g).map((x) => `
+            <a class="how-tab ${x.id === p.id ? 'is-active' : ''}" href="#/how/${x.id}" ${x.id === p.id ? 'aria-current="page"' : ''}>
+              <span>${esc(x.title)}</span>${x.status === 'reference' ? '<span class="mono tiny dim">ref</span>' : ''}
+            </a>`).join('')}
+        </div>`).join('')}
+    </aside>
+    <section class="how-main">
+      <label class="how-select"><span class="sr-only">Pattern</span>
+        <select id="how-select">${groups.map((g) => `<optgroup label="${esc(g)}">${PATTERNS.filter((x) => x.group === g).map((x) => `<option value="${x.id}" ${x.id === p.id ? 'selected' : ''}>${esc(x.title)}</option>`).join('')}</optgroup>`).join('')}</select>
+      </label>
+      <header class="how-head">
+        <div class="eyebrow">${esc({ Agents: 'Agent pattern', Harnesses: 'Harness pattern', Foundations: 'Foundation' }[p.group])}</div>
+        <div class="row between wrap">
+          <h1>${esc(p.title)}</h1>
+          <span class="status ${p.status === 'runs' ? 'status-runs' : 'status-ref'}">${p.status === 'runs' ? 'Runs in Berth today' : 'Reference design'}</span>
+        </div>
+        <p class="lede">${esc(p.summary)}</p>
+      </header>
+      <figure class="diagram-card">
+        <div class="diagram-scroll">${renderDiagram(p)}</div>
+        <figcaption>${renderLegend()}</figcaption>
+      </figure>
+      <div class="how-facts">
+        <div><h2>When to use it</h2><p>${esc(p.when)}</p></div>
+        <div><h2>Cost</h2><p>${esc(p.cost)}</p></div>
+        <div><h2>Governance</h2><p>${esc(p.governance)}</p></div>
+      </div>
+      <p class="small dim">These are architecture patterns, independent of industry or use case. Any of the governed examples can run on the patterns marked as running in Berth.</p>
+    </section>
+  </div>`);
 }
 
 // ---------------------------------------------------------------------------
@@ -1118,6 +1165,7 @@ function route() {
     if (!draft) { location.hash = '#/'; return; }
     return renderEditor();
   }
+  if (page === 'how') return renderHow(id);
   if (page === 'audit') return renderAudit();
   if (page === 'policy') return renderPolicy();
   if (page === 'settings') return renderSettings();
@@ -1256,6 +1304,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 document.addEventListener('change', (e) => {
+  if (e.target.id === 'how-select') { location.hash = `#/how/${e.target.value}`; return; }
   if (e.target.matches('select[data-role]') && e.target.id.startsWith('start-')) {
     pick.models[e.target.dataset.role] = e.target.value;
     renderStart();
