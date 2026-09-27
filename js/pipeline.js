@@ -13,6 +13,7 @@
 import { MODELS, modelById } from './models.js';
 import { state } from './store.js';
 import { runTurn, complete, parseJson } from './providers.js';
+import { formatSources } from './tools.js';
 
 export const ROLES = {
   router: { label: 'Router', stage: 'Triage', blurb: 'Sorts each request as simple or complex. Choose a cheap, fast model.' },
@@ -73,18 +74,34 @@ Reply with JSON only: {"verdict":"pass"|"revise","issues":["short, specific issu
  * `hooks.onStage(stage)` is called as each stage starts or finishes so the UI
  * can show progress. Returns { text, stages, steps, cost, baseline, notes }.
  */
-export async function execute(build, { system, history, tools, onText, onToolCall, onStage, rulesText, signal }) {
+export async function execute(build, { system, history, tools, onText, onToolCall, onStage, rulesText, retrieve, signal }) {
   const stages = [];
   const push = (s) => { stages.push(s); onStage?.(stages); return s; };
   const lastUser = [...history].reverse().find((h) => h.role === 'user')?.content || '';
 
-  // Chatbot: one model.
+  // Chatbot: one model, optionally grounded in retrieved passages.
   if (build.type === 'chatbot') {
+    let sys = system;
+    let sources = [];
+    if (build.useDocs && retrieve) {
+      const rs = push({ stage: 'Retrieve', role: 'retrieve', label: 'Documents', status: 'running' });
+      try {
+        sources = await retrieve(lastUser);
+        rs.note = `${sources.length} passage${sources.length === 1 ? '' : 's'}`;
+        if (sources.length) {
+          sys += `\n\nSources retrieved for this question:\n${formatSources(sources)}\n\nAnswer from these sources where they are relevant and cite them like [S1]. If they do not contain the answer, say so plainly.`;
+        }
+      } catch (err) {
+        rs.note = `retrieval failed: ${err.message.slice(0, 60)}`;
+      }
+      rs.status = 'done';
+      onStage?.(stages);
+    }
     const st = push({ stage: 'Answer', role: 'model', modelId: build.modelId, status: 'running' });
-    const r = await runTurn({ modelId: build.modelId, system, history, onText, signal });
+    const r = await runTurn({ modelId: build.modelId, system: sys, history, onText, signal });
     Object.assign(st, { status: 'done', usage: r.usage, cost: costOf(build.modelId, r.usage) });
     onStage?.(stages);
-    return finish(build, { text: r.text, stages, steps: [], stepLimitHit: false });
+    return finish(build, { text: r.text, stages, steps: [], stepLimitHit: false, sources });
   }
 
   const m = build.models || defaultModels(build.type, build.modelId);

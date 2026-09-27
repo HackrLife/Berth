@@ -58,6 +58,7 @@ export function describeControls(build) {
   if (c.citationCheck) list.push({ on: true, title: 'Citation check', detail: 'Cases and statutes flagged unverified until a lawyer confirms them' });
   if (c.forbidOutput?.length) list.push({ on: true, title: 'Output limits', detail: c.forbidOutput.map((r) => r.label).join(', ') });
   if (c.requireOutput?.length) list.push({ on: true, title: 'Required content', detail: c.requireOutput.map((r) => r.label).join(', ') });
+  if (build.useDocs) list.push({ on: true, title: 'Cited sources', detail: 'Answers draw on Knowledge documents and list the passages used' });
   list.push({ on: c.aiLabel, title: 'AI-generated label', detail: 'Art. 50 transparency' });
   list.push({ on: c.approval, title: 'Human approval', detail: 'Art. 14 · answers held until a person signs off' });
   list.push({ on: c.fullLog, title: 'Full record-keeping', detail: 'Art. 12 · prompt and answer kept in the audit log' });

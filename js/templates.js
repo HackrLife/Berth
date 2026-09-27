@@ -153,4 +153,27 @@ Location: hybrid, three days a week in the Sydney office.`,
       forbidOutput: [{ label: 'Shortlist only, never reject', re: '\\breject(?:ed|ion)?\\b', message: 'The answer mentions rejection. The screener may only shortlist or refer to a recruiter.' }],
     },
   },
+  {
+    key: 'policy-assistant',
+    industry: 'Any',
+    name: 'Policy Assistant',
+    type: 'chatbot',
+    modelId: 'gemini',
+    useDocs: true,
+    purpose: 'Answers staff questions about company policies from the uploaded policy documents, citing the passages it used.',
+    usedBy: 'Internal team',
+    tier: 'minimal',
+    basis: 'No Annex III use: internal policy Q&A',
+    rationale: 'Answering staff questions from internal policies is not a listed high-risk use. Answers cite their sources so staff can check them.',
+    instructions: `You are Policy Assistant for staff.
+- Answer only from the sources provided with each question, and cite them like [S1].
+- If the sources do not cover the question, say so and suggest who to ask. Do not guess.
+- Quote exact limits and numbers from the sources. Keep answers short.`,
+    starters: [
+      'How much can I spend on a hotel in Sydney?',
+      'Can I paste a customer\u2019s shipment details into a public AI chatbot?',
+      'I lost my laptop at the airport. What do I do?',
+    ],
+    safeguards: {},
+  },
 ];

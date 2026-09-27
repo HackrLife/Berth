@@ -1,6 +1,6 @@
 # Berth — Product Requirements Document
 
-**Version:** 0.4 (draft)
+**Version:** 0.5 (draft)
 **Author:** Dev Das
 **Status:** In development
 **Last updated:** September 2026
@@ -127,6 +127,18 @@ The Contract Reviewer demonstrates two points. Changing its deployment context f
 - API key entry for each provider, stored only in the browser's local storage, with a clear statement of where the key goes.
 - Governance settings: allowed models, blocked terms, and a redaction toggle for each PII type.
 
+### 5.6 Knowledge (governed retrieval)
+Users upload documents, and builds answer from them with cited sources.
+
+- **Ingestion:** text is extracted and redacted in the browser, so the original file never leaves the device. The redacted text is chunked, embedded (OpenAI `text-embedding-3-small`, 512 dimensions) and stored in Supabase Postgres with pgvector, hosted in Sydney.
+- **Isolation:** each visitor's documents are separated by row-level security in the database. The API uses a restricted role limited to Berth's own schema.
+- **Use in builds:** chatbots retrieve passages before every answer; agents and harnesses receive a document-search tool. Answers cite sources such as [S1] and list the passages used.
+- **Erasure and logging:** uploads, searches and deletions are logged; a single action erases a visitor's documents, chunks and server-side records.
+- **Samples:** two policies from a fictional company are shared read-only so retrieval works on first visit, with a fifth example build (Policy Assistant) grounded in them.
+
+### 5.7 Demo mode
+The hosted deployment runs on the author's own API keys so that reviewers need no setup. A server function forwards requests only to known provider endpoints and an allow-list of models, caps output length, and limits requests per visitor and per day. Visitors who add their own keys call providers directly.
+
 ## 6. User flow (first use)
 
 1. The user opens the GitHub Pages link and sees the builder: seven models and three build types, with the four governed examples below.
@@ -138,7 +150,7 @@ The Contract Reviewer demonstrates two points. Changing its deployment context f
 
 ## 7. Architecture
 
-- **Type:** a static single-page application with no build step, served by GitHub Pages.
+- **Type:** a static single-page application with no build step, plus four small serverless functions. The source of truth is the GitHub repository; Vercel deploys it on every push, with functions pinned to the Sydney region.
 - **Stack:** HTML, CSS and plain JavaScript ES modules: `models` (catalogue), `providers` (API adapters), `pipeline` (routing, review and cost), `governance` (redaction, policy, output checks, audit), `risk` (tiers and controls), `tools`, `templates`, `store` and `app` (interface).
 - **Model calls:** made directly from the browser to each provider's API with the user's own key. Three adapters cover all seven models: the Anthropic Messages API, the OpenAI-compatible Chat Completions API (OpenAI, xAI and OpenRouter) and the Gemini API. No Berth server exists, so no request passes through the author.
 - **Storage:** browser `localStorage` for keys, assistants, settings, chat history and the audit log.

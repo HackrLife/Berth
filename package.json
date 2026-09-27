@@ -1,0 +1,10 @@
+{
+  "name": "berth",
+  "private": true,
+  "type": "module",
+  "description": "Berth: multi-model agentic AI with governance. Static front end plus a few Vercel functions.",
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "postgres": "3.4.4"
+  }
+}
