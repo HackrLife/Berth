@@ -1,4 +1,12 @@
-// Tools an agent or harness can use. All run in the browser.
+// Tools an agent or harness can use. All run in the browser except document
+// search, which calls Berth's retrieval function.
+
+import { docs } from './api.js';
+
+/** Format retrieved passages as numbered sources the model can cite. */
+export function formatSources(results, offset = 0) {
+  return results.map((r, i) => `[S${i + 1 + offset}] ${r.document_name} (passage ${r.idx + 1})\n${r.content}`).join('\n\n');
+}
 
 function safeCalc(expr) {
   const src = String(expr).replace(/\s+/g, '');
@@ -23,6 +31,23 @@ function searchKnowledge(knowledge, query) {
 }
 
 export const TOOLS = {
+  documents: {
+    label: 'Document search',
+    blurb: 'Search uploaded documents and cite the passages used',
+    requires: 'retrieval',
+    def: {
+      name: 'search_documents',
+      description: 'Search the workspace documents (policies, contracts, reports) for passages relevant to a question. Returns numbered sources such as [S1]; cite them in the answer.',
+      parameters: { type: 'object', properties: { query: { type: 'string', description: 'What to look for, in plain words' } }, required: ['query'] },
+    },
+    run: async (args, build, ctx) => {
+      const results = await docs.search(String(args.query || ''), 5);
+      const offset = ctx?.sourceCount?.() || 0;
+      ctx?.onSources?.(results);
+      return results.length ? formatSources(results, offset) : 'No relevant passages found in the documents.';
+    },
+    describe: (args) => `Searched documents for "${args.query}"`,
+  },
   calculator: {
     label: 'Calculator',
     blurb: 'Exact arithmetic, e.g. repayments and ratios',

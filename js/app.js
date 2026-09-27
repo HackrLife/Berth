@@ -11,8 +11,10 @@ import {
 } from './governance.js';
 import { TIERS, USED_BY, controlsFor, describeControls, classify } from './risk.js';
 import { TOOLS, toolDefs, toolByFunctionName } from './tools.js';
+import { extractText, ACCEPT as ACCEPT_TYPES } from './extract.js';
 import { TEMPLATES } from './templates.js';
 import { PATTERNS, renderDiagram, renderLegend } from './diagrams.js';
+import { loadStatus, currentStatus, docs as docsApi } from './api.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -92,7 +94,8 @@ function download(name, text, type) {
 function modelStatus(m) {
   if (!state.policy.allowedModels.includes(m.id)) return { ok: false, text: 'Not allowed by policy' };
   if (!hasKey(m.id)) return { ok: false, text: 'Add API key', key: true };
-  return { ok: true, text: 'Ready' };
+  const own = Boolean(state.keys[m.provider === 'xai' && state.grokRoute === 'openrouter' ? 'openrouter' : m.provider]);
+  return { ok: true, text: own ? 'Ready · your key' : 'Ready · demo' };
 }
 
 // ---------------------------------------------------------------------------
@@ -111,6 +114,7 @@ function buildFromTemplate(t) {
     starters: [...(t.starters || [])],
     models: t.models ? { ...t.models } : defaultModels(t.type, t.modelId),
     routing: true,
+    useDocs: Boolean(t.useDocs),
     tools: [...(t.tools || [])],
     knowledge: t.knowledge || '',
     protectedTerms: [...(t.protectedTerms || [])],
@@ -148,6 +152,15 @@ if ((state.version || 0) < 2) {
   save();
 }
 
+// v3 added document retrieval and the Policy Assistant example.
+if ((state.version || 0) < 3) {
+  for (const t of TEMPLATES) {
+    if (!state.builds.some((b) => b.templateKey === t.key)) state.builds.push(buildFromTemplate(t));
+  }
+  state.version = 3;
+  save();
+}
+
 // A reload during an answer leaves it half-finished; mark it so.
 for (const chat of Object.values(state.chats)) {
   for (const m of chat) {
@@ -165,6 +178,7 @@ const ICON = {
   list: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>',
   gear: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>',
   map: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="6" height="5" rx="1"/><rect x="15" y="4" width="6" height="5" rx="1"/><rect x="9" y="15" width="6" height="5" rx="1"/><path d="M9 6.5h6M6 9v3.5h12V9M12 12.5V15"/></svg>',
+  book: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/></svg>',
   arrow: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
 };
 
@@ -180,6 +194,7 @@ function rail(active) {
     <a class="btn btn-outline rail-new" href="#/start">${ICON.plus} New build</a>
     <a class="rail-link rail-home ${active === 'home' ? 'is-active' : ''}" href="#/">${ICON.home}Home</a>
     <a class="rail-link rail-how ${active === 'how' ? 'is-active' : ''}" href="#/how">${ICON.map}How it works</a>
+    <a class="rail-link rail-how ${active === 'knowledge' ? 'is-active' : ''}" href="#/knowledge">${ICON.book}Knowledge</a>
     <div class="rail-group">
       <div class="eyebrow">Your builds</div>
       ${builds || '<p class="dim small pad8">Nothing built yet.</p>'}
@@ -208,6 +223,7 @@ function renderLanding() {
       <div class="eyebrow">A governed AI workspace</div>
       <h1>Multi-model agentic AI with governance and compliance logs.</h1>
       <p class="lede">Berth lets a team choose the right model for each job, route work between cheap and strong models to control cost, and apply controls that match the risk of each use. Personal data is removed before any prompt leaves the browser, and every decision is logged.</p>
+      ${currentStatus().demo ? `<p class="demo-note small">${ICON.shield} Live demo: runs on Berth's own keys, ${currentStatus().limits?.perVisitor || 40} requests per visitor per day. No sign-up or API key needed.</p>` : ''}
       <div class="row wrap gap8">
         <a class="btn btn-primary" href="#/start">Start building ${ICON.arrow}</a>
         <a class="btn btn-outline" href="#/how">How it works</a>
@@ -260,8 +276,8 @@ function renderLanding() {
 
     <section class="band">
       <h2 class="section-title">Governed examples</h2>
-      <p class="dim section-lede">One for each of four regulated industries. Open one, add an API key, and try it.</p>
-      <div class="grid grid-4">
+      <p class="dim section-lede">One for each of four regulated industries, plus a policy assistant that answers from uploaded documents.</p>
+      <div class="grid grid-auto">
         ${examples.map((b) => {
           const t = tmpl(b.templateKey);
           return `<a class="card tpl-card" href="#/b/${b.id}">
@@ -289,6 +305,113 @@ function pipelineDiagram(type) {
   const work = `<span class="pfork">${node('Fast', 'simple')}${node('Strong', 'complex')}</span>`;
   if (type === 'agent') return `<span class="pipe">${node('Router', 'triage')}${arrow}${work}</span>`;
   return `<span class="pipe">${node('Router', 'triage')}${arrow}${work}${arrow}${node('Reviewer', 'check')}${arrow}${node('Person', 'approve', 'pperson')}</span>`;
+}
+
+// ---------------------------------------------------------------------------
+// Knowledge: upload, redact, index, search, delete
+
+const kb = { docs: null, error: '', pending: null, busy: '', results: null, query: '', confirmErase: false };
+
+async function refreshDocs() {
+  try {
+    kb.docs = await docsApi.list();
+    kb.error = '';
+  } catch (err) {
+    kb.error = err.message;
+    kb.docs = kb.docs || [];
+  }
+  if (location.hash.startsWith('#/knowledge')) renderKnowledge();
+}
+
+function renderKnowledge() {
+  const st = currentStatus();
+  if (st.retrieval && kb.docs === null) { kb.docs = []; kb.busy = 'Loading documents…'; refreshDocs().then(() => { kb.busy = ''; renderKnowledge(); }); }
+  const counts = kb.pending ? summarise(kb.pending.findings) : {};
+  shell('knowledge', `
+  <div class="page">
+    <header class="page-head">
+      <h1>Knowledge</h1>
+      <p class="lede">Upload documents for your builds to search. Personal data is removed in your browser before anything is indexed, the original file never leaves your device, and every answer cites the passages it used.</p>
+    </header>
+    <div class="facts-row">
+      <div><span class="eyebrow">Embeddings</span><span>${esc(st.embedding || 'text-embedding-3-small')} · 512 dimensions</span></div>
+      <div><span class="eyebrow">Stored in</span><span>${esc(st.storage || 'Supabase pgvector')}</span></div>
+      <div><span class="eyebrow">Isolation</span><span>Row-level security per visitor</span></div>
+      <div><span class="eyebrow">Erasure</span><span>One click, logged</span></div>
+    </div>
+    ${st.retrieval ? '' : '<div class="notice">Document search runs on the hosted Berth demo. This copy has no retrieval service configured, so uploads are switched off.</div>'}
+    ${kb.error ? `<div class="notice warn-bg">${esc(kb.error)}</div>` : ''}
+
+    <section class="kb-grid">
+      <div class="card kb-upload">
+        <h2 class="h-sub">Add a document</h2>
+        ${kb.pending ? `
+          <div class="kb-pending">
+            <div class="row between wrap"><strong>${esc(kb.pending.name)}</strong><span class="mono tiny dim">${kb.pending.text.length.toLocaleString()} characters</span></div>
+            <div class="redact-note">${shieldIcon()} ${kb.pending.findings.length ? `${esc(describeCounts(counts))} will be removed before indexing` : 'No personal data found'}</div>
+            <div class="kb-preview">${highlightTokens(kb.pending.redacted.slice(0, 900))}${kb.pending.redacted.length > 900 ? '…' : ''}</div>
+            <div class="row gap8">
+              <button type="button" class="btn btn-primary" data-action="kb-index" ${kb.busy ? 'disabled' : ''}>${kb.busy ? esc(kb.busy) : 'Index document'}</button>
+              <button type="button" class="btn btn-ghost" data-action="kb-cancel">Cancel</button>
+            </div>
+          </div>` : `
+          <label class="kb-drop" for="kb-file">
+            <strong>Choose a file</strong>
+            <span class="small dim">PDF, Word, text, Markdown, CSV or JSON · up to 150,000 characters</span>
+            <input id="kb-file" type="file" accept="${ACCEPT_TYPES}" ${st.retrieval ? '' : 'disabled'}>
+          </label>
+          <details class="kb-paste"><summary class="small">Or paste text</summary>
+            <label class="field"><span>Name</span><input id="kb-name" placeholder="e.g. Leave policy"></label>
+            <label class="field"><span>Text</span><textarea id="kb-text" rows="5"></textarea></label>
+            <button type="button" class="btn btn-small btn-outline" data-action="kb-paste" ${st.retrieval ? '' : 'disabled'}>Preview redaction</button>
+          </details>`}
+      </div>
+
+      <div class="card kb-search">
+        <h2 class="h-sub">Test a search</h2>
+        <form id="kb-search-form" class="row gap8">
+          <label for="kb-q" class="sr-only">Question</label>
+          <input id="kb-q" value="${esc(kb.query)}" placeholder="e.g. What is the hotel limit in Sydney?" ${st.retrieval ? '' : 'disabled'}>
+          <button type="submit" class="btn btn-outline" ${st.retrieval ? '' : 'disabled'}>Search</button>
+        </form>
+        ${kb.results ? (kb.results.length ? `<ol class="kb-results">${kb.results.map((r) => `
+          <li><div class="row between"><strong class="small">${esc(r.document_name)}</strong><span class="mono tiny dim">passage ${r.idx + 1} · ${Math.round(r.similarity * 100)}% match</span></div>
+          <p class="small">${highlightTokens(r.content.slice(0, 320))}${r.content.length > 320 ? '…' : ''}</p></li>`).join('')}</ol>` : '<p class="small dim">No passages found.</p>') : '<p class="small dim">Runs the same vector search your builds use, over your documents and the shared samples.</p>'}
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="row between wrap">
+        <h2 class="section-title">Documents</h2>
+        ${kb.docs?.some((d) => !d.sample) ? (kb.confirmErase
+          ? '<span class="row gap8"><span class="small">Delete all your documents and their records?</span><button type="button" class="btn btn-small btn-quiet-danger" data-action="kb-erase">Delete everything</button><button type="button" class="btn btn-small btn-ghost" data-action="kb-erase-cancel">Keep</button></span>'
+          : '<button type="button" class="btn btn-small btn-quiet-danger" data-action="kb-erase-ask">Delete all my data</button>') : ''}
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Document</th><th>Chunks</th><th>Characters</th><th>Removed before indexing</th><th>Added</th><th></th></tr></thead>
+          <tbody>${kb.docs === null || (kb.busy && !kb.docs.length) ? '<tr><td colspan="6" class="dim">Loading…</td></tr>'
+            : kb.docs.length ? kb.docs.map((d) => `
+            <tr>
+              <td>${esc(d.name)} ${d.sample ? '<span class="mono tiny tag">SAMPLE · SHARED</span>' : '<span class="mono tiny tag">YOURS · PRIVATE</span>'}</td>
+              <td class="mono">${d.chunk_count}</td><td class="mono">${Number(d.chars).toLocaleString()}</td>
+              <td class="small">${esc(describeCounts(d.redactions || {}) || 'none')}</td>
+              <td class="mono small nowrap">${new Date(d.created_at).toLocaleDateString()}</td>
+              <td>${d.sample ? '' : `<button type="button" class="link-btn" data-action="kb-delete" data-id="${esc(d.id)}">Delete</button>`}</td>
+            </tr>`).join('') : '<tr><td colspan="6" class="dim">No documents yet.</td></tr>'}</tbody>
+        </table>
+      </div>
+      <p class="small dim">Sample documents belong to a fictional company and are shared read-only with every visitor. Your own documents are visible only to this browser.</p>
+    </section>
+  </div>`);
+}
+
+async function stageDocument(name, text) {
+  const clean = String(text || '').trim();
+  if (!clean) { toast('That file has no readable text.'); return; }
+  const { text: redacted, findings } = redact(clean);
+  kb.pending = { name, text: clean, redacted, findings };
+  renderKnowledge();
 }
 
 // ---------------------------------------------------------------------------
@@ -500,13 +623,16 @@ function renderEditor() {
       <label class="field"><span>Instructions</span><textarea id="f-instructions" rows="7" placeholder="How it should behave, what it must never do, and the format of its answers.">${esc(d.instructions)}</textarea></label>
       <label class="field"><span>Starter prompts <em class="dim">one per line</em></span><textarea id="f-starters" rows="3">${esc(d.starters.join('\n'))}</textarea></label>
       <label class="field"><span>Reference text <em class="dim">${isTool ? 'searchable with the knowledge tool' : 'added to the instructions'}</em></span><textarea id="f-knowledge" rows="5" placeholder="Paste a policy, criteria or a job description.">${esc(d.knowledge)}</textarea></label>
+      <label class="check-row"><input type="checkbox" id="f-docs" ${d.useDocs ? 'checked' : ''} ${currentStatus().retrieval ? '' : 'disabled'}> <span><strong>Search Knowledge documents</strong><br><span class="small dim">${currentStatus().retrieval
+        ? (d.type === 'chatbot' ? 'Relevant passages are retrieved before every answer and cited as sources.' : 'Adds a document-search tool; the model decides when to use it and cites what it finds.')
+        : 'Available on the hosted demo, where the retrieval service is configured.'}</span></span></label>
       <label class="field"><span>Protected names <em class="dim">comma separated, always removed before sending</em></span><input id="f-terms" value="${esc(d.protectedTerms.join(', '))}" placeholder="Client or patient names"></label>
 
       ${isTool ? `
       <fieldset class="fieldset">
         <legend>Tools</legend>
         <div class="grid grid-2">
-          ${Object.entries(TOOLS).map(([k, t]) => `
+          ${Object.entries(TOOLS).filter(([k]) => k !== 'documents').map(([k, t]) => `
             <div class="tool-row">
               <label class="check-row"><input type="checkbox" name="tool" value="${k}" ${d.tools.includes(k) ? 'checked' : ''}> <span><strong>${esc(t.label)}</strong><br><span class="small dim">${esc(t.blurb)}</span></span></label>
               ${d.type === 'harness' ? `<select class="tool-mode" data-tool="${k}" aria-label="${esc(t.label)} permission">
@@ -556,6 +682,7 @@ function readEditor() {
   d.instructions = $('#f-instructions').value.trim();
   d.starters = $('#f-starters').value.split('\n').map((s) => s.trim()).filter(Boolean);
   d.knowledge = $('#f-knowledge').value.trim();
+  d.useDocs = $('#f-docs')?.checked ?? d.useDocs;
   d.protectedTerms = $('#f-terms').value.split(',').map((s) => s.trim()).filter(Boolean);
   if (d.type !== 'chatbot') {
     d.tools = [...document.querySelectorAll('input[name="tool"]:checked')].map((i) => i.value);
@@ -722,9 +849,10 @@ function messageHtml(msg, i, build, isLast) {
   <div class="msg msg-assistant ${held ? 'is-held' : ''} ${msg.status === 'rejected' ? 'is-rejected' : ''}" data-index="${i}">
     <div class="msg-meta"><strong>${esc(build.name)}</strong> · ${esc(m?.name || '')} ${msg.at ? `· ${new Date(msg.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}
       ${c.aiLabel && msg.status !== 'streaming' ? '<span class="ai-label">AI-generated</span>' : ''}</div>
-    ${msg.stages?.length && build.type !== 'chatbot' ? stageStrip(msg.stages) : ''}
+    ${msg.stages?.length > 1 ? stageStrip(msg.stages) : ''}
     ${msg.steps?.length ? `<div class="steps">${msg.steps.map((s) => `<div class="step-line"><span class="mono tiny">${esc(s.name)}</span> ${esc(s.summary || '')}</div>`).join('')}</div>` : ''}
     <div class="answer">${msg.content ? renderMarkdown(msg.content) : '<span class="thinking">Thinking…</span>'}</div>
+    ${msg.sources?.length && msg.status !== 'streaming' ? `<details class="sources"><summary class="small">${msg.sources.length} source${msg.sources.length > 1 ? 's' : ''} used</summary><ol>${msg.sources.map((x) => `<li><span class="small"><strong>${esc(x.document_name)}</strong> <span class="mono tiny dim">passage ${x.idx + 1} · ${Math.round(x.similarity * 100)}%</span></span><span class="small dim">${esc(x.content.slice(0, 220))}${x.content.length > 220 ? '…' : ''}</span></li>`).join('')}</ol></details>` : ''}
     ${msg.review?.issues?.length ? `<div class="review ${msg.review.verdict === 'pass' ? 'review-pass' : ''}"><span class="mono tiny">REVIEWER · ${esc(modelById(build.models?.reviewer)?.name || '')}</span><ul>${msg.review.issues.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
     ${msg.notes?.length ? `<div class="notes">${msg.notes.map((n) => `<div class="note note-${n.level}">${esc(n.text)}</div>`).join('')}</div>` : ''}
     ${held ? `
@@ -750,7 +878,7 @@ function stageStrip(stages) {
   return `<div class="stages">${stages.map((st, i) => `
     ${i ? '<span class="parrow" aria-hidden="true">→</span>' : ''}
     <span class="stage stage-${st.role} ${st.status === 'running' ? 'is-running' : ''}">
-      <span class="stage-top"><span class="mono tiny">${esc(st.stage.toUpperCase())}</span><strong>${esc(modelById(st.modelId)?.name || '')}</strong></span>
+      <span class="stage-top"><span class="mono tiny">${esc(st.stage.toUpperCase())}</span><strong>${esc(st.label || modelById(st.modelId)?.name || '')}</strong></span>
       <span class="tiny dim">${st.status === 'running' ? 'working…' : esc(st.note || (st.usage ? `${(st.usage.in + st.usage.out).toLocaleString()} tok` : ''))}${st.cost ? ` · ${formatCost(st.cost)}` : ''}</span>
     </span>`).join('')}</div>`;
 }
@@ -931,7 +1059,14 @@ async function send(build, text, { regenerate = false } = {}) {
   run.controller = new AbortController();
   renderRun(build.id);
 
-  const toolNames = build.type === 'chatbot' ? [] : (build.tools || []).filter((k) => build.harness?.toolModes?.[k] !== 'off');
+  const toolNames = build.type === 'chatbot' ? [] : [...new Set([...(build.tools || []), ...(build.useDocs && currentStatus().retrieval ? ['documents'] : [])])]
+    .filter((k) => build.harness?.toolModes?.[k] !== 'off');
+  reply.sources = [];
+  const retrieve = async (q) => {
+    const r = await docsApi.search(q, 5);
+    reply.sources.push(...r);
+    return r;
+  };
   let result;
   let pending = 0;
   const paint = () => {
@@ -950,13 +1085,17 @@ async function send(build, text, { regenerate = false } = {}) {
       tools: toolDefs(toolNames),
       rulesText: describeControls(build).filter((x) => x.on).map((x) => `- ${x.title}: ${x.detail}`).join('\n'),
       signal: run.controller.signal,
+      retrieve: currentStatus().retrieval ? retrieve : null,
       onText: (t) => { reply.content = t; paint(); },
       onStage: (stages) => { reply.stages = stages.map((st) => ({ ...st })); refreshMessages(build); },
       onToolCall: async (call) => {
         const [key, tool] = toolByFunctionName(call.name) || [];
         if (!tool || !toolNames.includes(key)) throw new Error(`Tool ${call.name} is not available to this build.`);
         if (build.type === 'harness' && build.harness?.toolModes?.[key] === 'ask') await askToolPermission(build, call);
-        const out = await tool.run(call.args || {}, build);
+        const out = await tool.run(call.args || {}, build, {
+          sourceCount: () => reply.sources.length,
+          onSources: (r) => { reply.sources.push(...r); },
+        });
         reply.steps.push({ name: tool.label, summary: tool.describe(call.args || {}, out) });
         refreshMessages(build);
         return out;
@@ -1003,6 +1142,7 @@ async function send(build, text, { regenerate = false } = {}) {
       stages.find((st) => st.stage === 'Triage')?.note ? `route: ${stages.find((st) => st.stage === 'Triage').note}` : '',
       result?.review ? `review: ${result.review.verdict}${result.review.issues.length ? ` (${result.review.issues.join('; ')})` : ''}` : '',
       reply.steps.length ? `tools: ${reply.steps.map((st) => st.name).join(', ')}` : '',
+      reply.sources?.length ? `sources: ${reply.sources.map((x, i) => `S${i + 1} ${x.document_name} #${x.idx + 1}`).join('; ')}` : '',
       reply.notes?.length ? `checks: ${reply.notes.map((n) => n.text).join(' | ')}` : '',
       reply.error || '',
       c.fullLog ? `prompt: ${lastUser?.sent || ''} || answer: ${reply.content}` : '',
@@ -1166,6 +1306,7 @@ function route() {
     return renderEditor();
   }
   if (page === 'how') return renderHow(id);
+  if (page === 'knowledge') return renderKnowledge();
   if (page === 'audit') return renderAudit();
   if (page === 'policy') return renderPolicy();
   if (page === 'settings') return renderSettings();
@@ -1207,6 +1348,46 @@ document.addEventListener('click', async (e) => {
       break;
     }
     case 'stop': run.controller?.abort(); break;
+    case 'kb-cancel': kb.pending = null; renderKnowledge(); break;
+    case 'kb-paste': stageDocument($('#kb-name').value.trim() || 'Pasted text', $('#kb-text').value); break;
+    case 'kb-index': {
+      const p = kb.pending;
+      kb.busy = 'Indexing…';
+      renderKnowledge();
+      try {
+        const counts = summarise(p.findings);
+        const d = await docsApi.add(p.name, p.redacted, counts);
+        audit({ event: 'Document indexed', build: d.name, outcome: `${d.chunk_count} chunks`, redactions: describeCounts(counts) || 'none', actor: 'User', detail: `${p.text.length} characters, original kept on device` });
+        kb.pending = null;
+        toast('Indexed. Your builds can now search it.');
+      } catch (err) {
+        kb.error = err.message;
+      }
+      kb.busy = '';
+      await refreshDocs();
+      break;
+    }
+    case 'kb-delete': {
+      try {
+        await docsApi.remove(el.dataset.id);
+        audit({ event: 'Document deleted', outcome: 'deleted', actor: 'User', detail: el.dataset.id });
+        toast('Document and its chunks deleted');
+      } catch (err) { kb.error = err.message; }
+      await refreshDocs();
+      break;
+    }
+    case 'kb-erase-ask': kb.confirmErase = true; renderKnowledge(); break;
+    case 'kb-erase-cancel': kb.confirmErase = false; renderKnowledge(); break;
+    case 'kb-erase': {
+      try {
+        const r = await docsApi.eraseAll();
+        audit({ event: 'Erasure completed', outcome: `${r.deleted} documents deleted`, actor: 'User', detail: 'All documents, chunks and server-side events for this visitor removed' });
+        toast('All your documents and records were deleted');
+      } catch (err) { kb.error = err.message; }
+      kb.confirmErase = false;
+      await refreshDocs();
+      break;
+    }
     case 'approve': review(currentBuild(), Number(el.dataset.index), true); break;
     case 'reject': review(currentBuild(), Number(el.dataset.index), false); break;
     case 'regenerate': {
@@ -1252,6 +1433,14 @@ document.addEventListener('click', async (e) => {
 document.addEventListener('submit', (e) => {
   const form = e.target;
   e.preventDefault();
+  if (form.id === 'kb-search-form') {
+    kb.query = $('#kb-q').value.trim();
+    if (!kb.query) return;
+    const { text: q } = redact(kb.query);
+    docsApi.search(q, 5).then((r) => { kb.results = r; audit({ event: 'Document search', outcome: `${r.length} passages`, actor: 'User' }); renderKnowledge(); })
+      .catch((err) => { kb.error = err.message; renderKnowledge(); });
+    return;
+  }
   if (form.id === 'editor') {
     readEditor();
     if (!draft.name) { $('#f-name').focus(); toast('Give the build a name.'); return; }
@@ -1304,6 +1493,13 @@ document.addEventListener('keydown', (e) => {
 });
 
 document.addEventListener('change', (e) => {
+  if (e.target.id === 'kb-file' && e.target.files?.[0]) {
+    const f = e.target.files[0];
+    kb.busy = 'Reading file…';
+    extractText(f).then((t) => { kb.busy = ''; stageDocument(f.name, t); })
+      .catch((err) => { kb.busy = ''; kb.error = err.message; renderKnowledge(); });
+    return;
+  }
   if (e.target.id === 'how-select') { location.hash = `#/how/${e.target.value}`; return; }
   if (e.target.matches('select[data-role]') && e.target.id.startsWith('start-')) {
     pick.models[e.target.dataset.role] = e.target.value;
@@ -1332,4 +1528,5 @@ document.addEventListener('change', (e) => {
   }
 });
 
+loadStatus().then(() => route());
 route();

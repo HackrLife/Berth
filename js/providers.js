@@ -9,6 +9,7 @@
 
 import { modelById } from './models.js';
 import { state } from './store.js';
+import { currentStatus, proxyFetch } from './api.js';
 
 const OPENAI_COMPAT = {
   openai: 'https://api.openai.com/v1',
@@ -33,9 +34,12 @@ export function resolve(catalogueId) {
     provider = 'openrouter';
     model = state.modelIds['grok@openrouter'] || m.openrouterModel;
   }
-  const key = state.keys[provider];
+  let key = state.keys[provider];
+  // Demo mode: no personal key, but the deployment holds one for this provider.
+  const viaProxy = !key && Boolean(currentStatus().providers?.[provider]);
+  if (viaProxy) key = 'demo';
   const format = provider === 'anthropic' ? 'anthropic' : provider === 'google' ? 'gemini' : 'openai';
-  return { entry: m, provider, model, key, format };
+  return { entry: m, provider, model, key, format, viaProxy };
 }
 
 export function hasKey(catalogueId) {
@@ -45,10 +49,12 @@ export function hasKey(catalogueId) {
 // ---------------------------------------------------------------------------
 // Low-level HTTP
 
-async function post(url, headers, body, signal) {
+async function post(url, headers, body, signal, r) {
   let res;
   try {
-    res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal });
+    res = r?.viaProxy
+      ? await proxyFetch(url, body, signal)
+      : await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal });
   } catch (err) {
     if (err.name === 'AbortError') throw err;
     throw new ProviderError(
@@ -60,13 +66,13 @@ async function post(url, headers, body, signal) {
     let detail = '';
     try {
       const j = await res.json();
-      detail = j.error?.message || j.message || JSON.stringify(j).slice(0, 300);
+      detail = (typeof j.error === 'string' ? j.error : j.error?.message) || j.message || JSON.stringify(j).slice(0, 300);
     } catch { /* ignore */ }
     const hint = res.status === 401 || res.status === 403
       ? 'The API key was rejected. Check it in Settings.'
       : res.status === 404
         ? 'The model id may be wrong. Load the available models in Settings.'
-        : res.status === 429 ? 'Rate limit or quota reached on your provider account.' : '';
+        : res.status === 429 ? (r?.viaProxy ? '' : 'Rate limit or quota reached on your provider account.') : '';
     throw new ProviderError(`${res.status}: ${detail || res.statusText}`, hint);
   }
   return res;
@@ -111,7 +117,7 @@ const anthropic = {
   async call(r, { system, native, tools, signal }) {
     const body = { model: r.model, max_tokens: 4096, system, messages: native };
     if (tools?.length) body.tools = this.tools(tools);
-    const res = await post('https://api.anthropic.com/v1/messages', this.headers(r.key), body, signal);
+    const res = await post('https://api.anthropic.com/v1/messages', this.headers(r.key), body, signal, r);
     const j = await res.json();
     const text = j.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
     const calls = j.content.filter((b) => b.type === 'tool_use').map((b) => ({ id: b.id, name: b.name, args: b.input || {} }));
@@ -125,7 +131,7 @@ const anthropic = {
   },
   async stream(r, { system, native, onText, signal }) {
     const body = { model: r.model, max_tokens: 4096, system, messages: native, stream: true };
-    const res = await post('https://api.anthropic.com/v1/messages', this.headers(r.key), body, signal);
+    const res = await post('https://api.anthropic.com/v1/messages', this.headers(r.key), body, signal, r);
     let text = '';
     for await (const data of sseLines(res)) {
       try {
@@ -168,7 +174,7 @@ const openai = {
   async call(r, { native, tools, signal }) {
     const body = { model: r.model, messages: native };
     if (tools?.length) body.tools = this.tools(tools);
-    const res = await post(this.url(r), this.headers(r), body, signal);
+    const res = await post(this.url(r), this.headers(r), body, signal, r);
     const j = await res.json();
     const msg = j.choices?.[0]?.message || {};
     const calls = (msg.tool_calls || []).map((c) => {
@@ -185,7 +191,7 @@ const openai = {
   },
   async stream(r, { native, onText, signal }) {
     const body = { model: r.model, messages: native, stream: true };
-    const res = await post(this.url(r), this.headers(r), body, signal);
+    const res = await post(this.url(r), this.headers(r), body, signal, r);
     let text = '';
     for await (const data of sseLines(res)) {
       if (data === '[DONE]') break;
@@ -225,7 +231,7 @@ const gemini = {
   },
   async call(r, { system, native, tools, signal }) {
     const url = `${this.base}/models/${encodeURIComponent(r.model)}:generateContent`;
-    const res = await post(url, this.headers(r.key), this.body(system, native, tools), signal);
+    const res = await post(url, this.headers(r.key), this.body(system, native, tools), signal, r);
     const j = await res.json();
     const content = j.candidates?.[0]?.content || { role: 'model', parts: [] };
     const parts = content.parts || [];
@@ -243,7 +249,7 @@ const gemini = {
   },
   async stream(r, { system, native, onText, signal }) {
     const url = `${this.base}/models/${encodeURIComponent(r.model)}:streamGenerateContent?alt=sse`;
-    const res = await post(url, this.headers(r.key), this.body(system, native), signal);
+    const res = await post(url, this.headers(r.key), this.body(system, native), signal, r);
     let text = '';
     for await (const data of sseLines(res)) {
       try {

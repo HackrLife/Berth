@@ -380,6 +380,30 @@ dialog::backdrop { background: rgba(11, 27, 54, 0.45); }
 .d-edge-label-bg { fill: #FFFFFF; stroke: var(--line); stroke-width: 0.8; }
 .d-edge-label { font-family: var(--mono); font-size: 10px; fill: var(--ink-2); }
 
+
+/* Knowledge */
+.grid-auto { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+.demo-note { display: inline-flex; align-items: center; gap: 8px; margin: 0; padding: 8px 12px; border-radius: 8px; background: #EEF7F2; color: var(--ok); }
+.facts-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.facts-row > div { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; font-size: 13.5px; }
+.kb-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.kb-grid .card { cursor: default; gap: 12px; }
+.kb-grid .card:hover { box-shadow: none; border-color: var(--line); }
+.kb-drop { position: relative; display: flex; flex-direction: column; gap: 4px; align-items: center; justify-content: center; padding: 28px 16px; border: 1.5px dashed var(--line-3); border-radius: 10px; background: #FAFBFE; text-align: center; cursor: pointer; }
+.kb-drop:hover { border-color: var(--accent); }
+.kb-drop input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.kb-paste summary { cursor: pointer; color: var(--accent); }
+.kb-paste[open] { display: flex; flex-direction: column; gap: 10px; }
+.kb-pending { display: flex; flex-direction: column; gap: 10px; }
+.kb-preview { max-height: 220px; overflow: auto; padding: 12px; border-radius: 8px; background: var(--ground); font-size: 13px; line-height: 1.55; white-space: normal; }
+.kb-results { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 10px; }
+.kb-results p { margin: 4px 0 0; color: var(--ink-2); }
+.sources { font-size: 13px; }
+.sources summary { cursor: pointer; color: var(--accent); }
+.sources ol { margin: 8px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; }
+.sources li span { display: block; }
+.stage-retrieve { background: #EEF7F2; }
+
 /* Responsive */
 @media (max-width: 1180px) {
   .shell.has-aside { grid-template-columns: 232px minmax(0, 1fr); }
@@ -392,6 +416,7 @@ dialog::backdrop { background: rgba(11, 27, 54, 0.45); }
   .how-tabs { display: none; }
   .how-select { display: block; }
   .how-facts { grid-template-columns: 1fr; }
+  .kb-grid, .facts-row { grid-template-columns: 1fr; }
   .role-row { grid-template-columns: 1fr; }
 }
 @media (max-width: 760px) {
