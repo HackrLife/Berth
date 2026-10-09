@@ -30,7 +30,11 @@ export function resolve(catalogueId) {
   if (!m) throw new ProviderError(`Unknown model "${catalogueId}"`);
   let provider = m.provider;
   let model = state.modelIds[m.id] || m.defaultModel;
-  if (m.id === 'grok' && state.grokRoute === 'openrouter') {
+  const demo = currentStatus().providers || {};
+  // Grok goes through OpenRouter when chosen, or when the demo has no xAI key but has OpenRouter.
+  const grokViaOpenRouter = state.grokRoute === 'openrouter'
+    || (!state.keys.xai && !demo.xai && (state.keys.openrouter || demo.openrouter));
+  if (m.id === 'grok' && grokViaOpenRouter) {
     provider = 'openrouter';
     model = state.modelIds['grok@openrouter'] || m.openrouterModel;
   }
