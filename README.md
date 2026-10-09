@@ -68,11 +68,11 @@ Two sample policies from a fictional company are shared read-only so retrieval w
 
 ## Demo mode
 
-On the hosted deployment, visitors need no API keys. A server function (`api/proxy.js`) forwards model requests with the deployment's own keys, accepts only known provider endpoints and an allow-list of models, caps output length, and limits requests per visitor and per day. Anyone who adds their own keys in Settings calls the providers directly instead.
+On the hosted deployment, visitors need no API keys. A server function (`supabase/functions/berth-api`) forwards model requests with the deployment's own keys, accepts only known provider endpoints and an allow-list of models, caps output length, and limits requests per visitor and per day. Anyone who adds their own keys in Settings calls the providers directly instead.
 
 ## Running it
 
-The front end is a static site with no build step. Demo mode and retrieval use four small Vercel functions in `api/`; without them the site still runs with your own API keys.
+The front end is a static site with no build step, published by GitHub Pages from this repository. Demo mode and retrieval use one Supabase Edge Function (`supabase/functions/berth-api`) running in Sydney next to the database; without it the site still runs with your own API keys.
 
 ```bash
 git clone https://github.com/HackrLife/Berth.git
@@ -102,11 +102,9 @@ js/store.js         local persistence
 js/app.js           interface, routing and the send pipeline
 js/api.js           client for the server functions
 js/extract.js       in-browser text extraction (PDF, Word, text)
-api/proxy.js        demo mode: key-holding proxy with limits
-api/docs.js         index, list and delete documents
-api/search.js       vector search under row-level security
-api/status.js       what this deployment supports
-supabase/           database schema, roles and policies
+supabase/functions/berth-api/   one Edge Function: demo proxy with limits,
+                                document indexing, vector search, erasure
+supabase/migrations/            database schema, restricted role and policies
 ```
 
 Design choices worth noting:

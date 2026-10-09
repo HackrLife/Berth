@@ -1,7 +1,7 @@
 // Sample documents for the demo, shared read-only with every visitor.
 // Meridian Freight Co. is a fictional company.
 
-export const SAMPLES = [
+export const SAMPLES: { name: string; text: string }[] = [
   {
     name: 'Meridian Freight Co. · Travel and Expense Policy',
     text: `Meridian Freight Co. Travel and Expense Policy
