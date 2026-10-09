@@ -19,5 +19,12 @@ export default function handler(req, res) {
     embedding: EMBED_MODEL,
     storage: 'Supabase · Sydney (ap-southeast-2)',
     limits: LIMITS,
+    // Names only, never values: helps confirm the deployment sees its settings.
+    deployment: {
+      env: env('VERCEL_ENV', 'unknown'),
+      commit: env('VERCEL_GIT_COMMIT_SHA').slice(0, 7) || null,
+      database: dbConfigured(),
+      berthVars: Object.keys(process.env).filter((k) => /^(BERTH_|DEMO_)|_API_KEY$/.test(k)).sort(),
+    },
   });
 }
