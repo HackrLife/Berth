@@ -1,5 +1,6 @@
-// Four governed templates, one per regulated industry.
-// Each shows a different build type and a different set of safeguards.
+// Five governed examples, all inside Meridian Bank (a fictional bank).
+// Each shows a different build type and set of safeguards, and each answers
+// from its own policy document in Knowledge (see api/_samples.js).
 
 const BLIND_SCREENING = [
   { type: 'NAME', re: '\\b(?:candidate name|full name|name)\\s*[:\\-]\\s*([^\\n,;]+)', group: 1 },
@@ -14,23 +15,27 @@ const BLIND_SCREENING = [
 export const TEMPLATES = [
   {
     key: 'symptom-guide',
-    industry: 'Health',
-    name: 'Symptom Guide',
+    industry: 'Staff health',
+    name: 'Staff Health Guide',
     type: 'chatbot',
     modelId: 'claude',
-    purpose: 'Gives members of the public general guidance about symptoms and when to seek care.',
+    useDocs: true,
+    docScope: ['Meridian Bank · Staff Health and Wellbeing Guide'],
+    purpose: 'Gives Meridian Bank staff general guidance about symptoms, when to seek care, and how sick and carer\u2019s leave works.',
     usedBy: 'Clinicians or patients',
     tier: 'high',
     basis: 'Annex I · medical device software',
     rationale: 'Software that gives guidance about symptoms has a medical purpose and can qualify as a medical device, which brings it under Annex I.',
-    instructions: `You are Symptom Guide, a general health information assistant.
+    instructions: `You are Staff Health Guide for Meridian Bank employees.
+- Use the bank's Staff Health and Wellbeing Guide in the sources for care pathways, the Health Line, leave rules and certificates. Cite it like [S1].
 - Explain possible common causes in plain language and say what kind of care is appropriate: self-care, a GP within days, or urgent care.
 - Never give a diagnosis. Never recommend a medicine, a dose or a change to prescribed treatment.
 - Always ask about duration, severity and other symptoms if they are missing.
 - End every answer with: "This is general information, not medical advice. Please see a doctor or pharmacist."`,
     starters: [
       'I have had a dry cough for ten days and feel tired. Should I see someone?',
-      'My daughter has a mild fever of 38.2 and a runny nose. What should I watch for?',
+      'My son has a fever of 38.2 and a runny nose. What should I watch for, and can I take carer\u2019s leave?',
+      'I have been off sick for three days. Do I need a medical certificate?',
       'I get chest pain when I run. It goes away when I stop.',
     ],
     safeguards: {
@@ -43,23 +48,26 @@ export const TEMPLATES = [
   },
   {
     key: 'loan-checker',
-    industry: 'Finance',
+    industry: 'Lending',
     name: 'Loan Eligibility Checker',
     type: 'agent',
     modelId: 'gpt',
     models: { router: 'mistral', fast: 'gpt', strong: 'gpt' },
-    purpose: 'Assesses a personal loan application against the lender’s stated criteria and proposes an outcome for a credit officer.',
+    useDocs: true,
+    docScope: ['Meridian Bank · Personal Lending Credit Policy'],
+    purpose: 'Assesses a personal loan application against Meridian Bank\u2019s Personal Lending Credit Policy and proposes an outcome for a credit officer.',
     usedBy: 'Lenders or insurers',
     tier: 'high',
     basis: 'Annex III(5)(b) · creditworthiness',
     rationale: 'Evaluating the creditworthiness of natural persons is listed as high risk in Annex III.',
     tools: ['calculator', 'knowledge'],
     instructions: `You are Loan Eligibility Checker, supporting a credit officer.
-- Use search_knowledge to find the lending criteria before assessing. Use calculator for every ratio and repayment figure.
+- Search the bank's Personal Lending Credit Policy before assessing (search_documents, or search_knowledge if that is the tool available) and cite it. Use calculator for every ratio and repayment figure.
+- Proposed outcome must be one of: Meets criteria, Refer to credit officer, Does not meet criteria.
 - Structure the answer as: Proposed outcome, Reasons (numbered, in plain language the applicant could understand), Figures used, Information missing.
 - You propose; the credit officer decides. Never state that an application is approved or declined as final.
 - Do not use age, gender, marital status, nationality or postcode as reasons.`,
-    knowledge: `Personal loan criteria (example lender)
+    knowledge: `Meridian Bank personal loan criteria (summary)
 
 Serviceability: total monthly debt repayments including the new loan must not exceed 35% of gross monthly income.
 
@@ -87,22 +95,26 @@ Living expenses: use the declared figure or $2,100 per month for a single applic
     name: 'Contract Reviewer',
     type: 'chatbot',
     modelId: 'mistral',
-    purpose: 'Reviews contract clauses, identifies obligations and risks, and suggests redlines for a lawyer to consider.',
+    useDocs: true,
+    docScope: ['Meridian Bank · Supplier Contracting Standards'],
+    purpose: 'Reviews supplier contract clauses against Meridian Bank\u2019s Supplier Contracting Standards and suggests redlines for the in-house legal team.',
     usedBy: 'Law firm',
     tier: 'minimal',
-    basis: 'No Annex III use when used by a law firm',
-    rationale: 'Reviewing contracts for a law firm is not a listed high-risk use. Professional duties still require confidentiality and verified citations.',
+    basis: 'No Annex III use for in-house contract review',
+    rationale: 'Reviewing supplier contracts for a legal team is not a listed high-risk use. Professional duties still require confidentiality and verified citations.',
     tierByContext: {
       'Court or tribunal': { tier: 'high', basis: 'Annex III(8)(a) · administration of justice', rationale: 'Used by a judicial authority to research and interpret facts and law, which is listed as high risk.' },
     },
     protectedTerms: ['Harbourline Logistics', 'Kestrel Mining'],
-    instructions: `You are Contract Reviewer, assisting a qualified lawyer.
-- For each clause: summarise it, list obligations by party, rate risk (low, medium, high) with a reason, and suggest a redline.
+    instructions: `You are Contract Reviewer, assisting Meridian Bank's in-house lawyers.
+- Check each clause against the bank's Supplier Contracting Standards in the sources and cite the section like [S1].
+- For each clause: summarise it, list obligations by party, rate risk (low, medium, high) with a reason, say whether it needs escalation to General Counsel, and suggest a redline.
 - Cite legislation or cases only when necessary and say they must be verified.
 - Client names appear as placeholders such as [CLIENT_1]. Keep them as placeholders.`,
     starters: [
       'Review this: "Harbourline Logistics shall indemnify the Supplier against all losses arising from or in connection with this Agreement, without limitation."',
-      'Is a 90-day payment term enforceable for a small business supplier in Australia?',
+      'The supplier wants 60-day payment terms and to host our customer data in Singapore. What do our standards say?',
+      'Review: "This Agreement renews automatically for successive 3-year terms unless terminated with 12 months\u2019 notice."',
     ],
     safeguards: {
       citationCheck: true,
@@ -110,12 +122,14 @@ Living expenses: use the declared figure or $2,100 per month for a single applic
   },
   {
     key: 'candidate-screener',
-    industry: 'HR',
+    industry: 'Recruitment',
     name: 'Candidate Screener',
     type: 'harness',
     modelId: 'gpt',
     models: { router: 'mistral', fast: 'gpt', strong: 'gpt', reviewer: 'claude' },
-    purpose: 'Assesses CVs against a job description and proposes a shortlist for a recruiter.',
+    useDocs: true,
+    docScope: ['Meridian Bank · Recruitment and Fair Hiring Policy'],
+    purpose: 'Assesses CVs against a Meridian Bank job description under its Recruitment and Fair Hiring Policy, and proposes a shortlist for a recruiter.',
     usedBy: 'HR and recruitment',
     tier: 'high',
     basis: 'Annex III(4)(a) · recruitment and selection',
@@ -132,15 +146,17 @@ Living expenses: use the declared figure or $2,100 per month for a single applic
       toolModes: { knowledge: 'auto' },
     },
     instructions: `You are Candidate Screener, supporting a recruiter.
-- Use search_knowledge to read the job description first.
+- First search the bank's Recruitment and Fair Hiring Policy for the job description and shortlisting rules (search_documents, or search_knowledge if that is the tool available), and cite it.
 - Assess the CV against each essential and desirable criterion: Met, Partly met or Not evidenced, with the evidence.
 - Recommend either "Shortlist" or "Refer to recruiter". You may never reject a candidate.
 - Identifying details are removed before you see the CV. Do not guess them.`,
-    knowledge: `Job description: Senior Data Analyst, Sydney
+    knowledge: `Job description: Senior Data Analyst, Retail Credit Analytics, Sydney
 
 Essential: 5+ years in analytics; production SQL; Python for analysis; presenting findings to senior stakeholders.
 
-Desirable: cloud data warehouse (BigQuery, Snowflake or Redshift); experience in financial services; experimentation or A/B testing.
+Desirable: cloud data warehouse (BigQuery, Snowflake or Redshift); experience in banking or financial services; experimentation or A/B testing; credit risk models.
+
+Shortlisting: shortlist when all essential criteria are met; refer to the recruiter when one essential criterion is only partly met. Never reject.
 
 Location: hybrid, three days a week in the Sydney office.`,
     starters: [
@@ -155,23 +171,25 @@ Location: hybrid, three days a week in the Sydney office.`,
   },
   {
     key: 'policy-assistant',
-    industry: 'Any',
+    industry: 'Operations',
     name: 'Policy Assistant',
     type: 'chatbot',
     modelId: 'gpt',
     useDocs: true,
-    purpose: 'Answers staff questions about company policies from the uploaded policy documents, citing the passages it used.',
+    docScope: ['Meridian Bank · Staff Handbook: Travel, Expenses, Security and AI Use'],
+    purpose: 'Answers Meridian Bank staff questions from the Staff Handbook on travel, expenses, gifts, security and AI use, citing the passages it used.',
     usedBy: 'Internal team',
     tier: 'minimal',
     basis: 'No Annex III use: internal policy Q&A',
     rationale: 'Answering staff questions from internal policies is not a listed high-risk use. Answers cite their sources so staff can check them.',
-    instructions: `You are Policy Assistant for staff.
+    instructions: `You are Policy Assistant for Meridian Bank staff.
 - Answer only from the sources provided with each question, and cite them like [S1].
 - If the sources do not cover the question, say so and suggest who to ask. Do not guess.
 - Quote exact limits and numbers from the sources. Keep answers short.`,
     starters: [
       'How much can I spend on a hotel in Sydney?',
-      'Can I paste a customer\u2019s shipment details into a public AI chatbot?',
+      'Can I paste a customer\u2019s account details into a public AI chatbot?',
+      'A supplier offered me concert tickets worth $200. Can I accept?',
       'I lost my laptop at the airport. What do I do?',
     ],
     safeguards: {},

@@ -66,5 +66,6 @@ export const docs = {
   add: (name, text, redactions) => call('/docs', { method: 'POST', body: { name, text, redactions } }).then((j) => j.document),
   remove: (id) => call(`/docs?id=${encodeURIComponent(id)}`, { method: 'DELETE' }),
   eraseAll: () => call('/docs?all=1', { method: 'DELETE' }),
-  search: (query, k = 5, documentIds = null) => call('/search', { method: 'POST', body: { query, k, documentIds } }).then((j) => j.results),
+  search: (query, k = 5, { ids = null, names = null } = {}) =>
+    call('/search', { method: 'POST', body: { query, k, documentIds: ids, documentNames: names } }).then((j) => j.results),
 };

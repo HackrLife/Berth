@@ -45,12 +45,15 @@ Each pattern links directly, for example `#/how/routed`.
 
 ## Governed examples
 
-| Example | Industry | Type | Tier | Safeguards |
-|---|---|---|---|---|
-| Symptom Guide | Health | Chatbot | High (medical device software, Annex I) | Emergency stop on red-flag symptoms, no diagnosis or dosage, "not medical advice" check |
-| Loan Eligibility Checker | Finance | Agent: Mistral routes, Gemini or GPT works | High (credit scoring, Annex III) | Plain-language reasons required, no final decisions, human sign-off |
-| Contract Reviewer | Legal | Chatbot | Minimal for a law firm, High for a court | Client names redacted, citations flagged unverified |
-| Candidate Screener | HR | Harness: Mistral routes, Gemini or Claude works, GPT reviews | High (recruitment, Annex III) | Blind screening, shortlist only, independent review, human approval |
+All five examples run inside **Meridian Bank**, a fictional Australian bank, so one organisation shows how different uses of AI carry different risks. Each example answers from its own policy document, which is preloaded in Knowledge and cited in every answer.
+
+| Example | Bank function | Policy it answers from | Type | Tier | Safeguards |
+|---|---|---|---|---|---|
+| Staff Health Guide | Staff health | Staff Health and Wellbeing Guide | Chatbot: Claude | High (medical device software, Annex I) | Emergency stop on red-flag symptoms, no diagnosis or dosage, "not medical advice" check |
+| Loan Eligibility Checker | Lending | Personal Lending Credit Policy | Agent: Mistral routes, GPT works | High (credit scoring, Annex III) | Plain-language reasons required, no final decisions, human sign-off |
+| Contract Reviewer | Legal | Supplier Contracting Standards | Chatbot: Mistral | Minimal in-house, High for a court | Supplier names redacted, citations flagged unverified |
+| Candidate Screener | Recruitment | Recruitment and Fair Hiring Policy | Harness: Mistral routes, GPT works, Claude reviews | High (recruitment, Annex III) | Blind screening, shortlist only, independent review, human approval |
+| Policy Assistant | Operations | Staff Handbook: travel, expenses, security and AI use | Chatbot: GPT | Minimal | Answers only from cited sources |
 
 Try this: open **Contract Reviewer** and change *Used by* to *Court or tribunal*. The same assistant moves from Minimal to High risk, because the AI Act classifies by use rather than by technology.
 
@@ -64,7 +67,7 @@ Visitors can upload PDF, Word, text, Markdown, CSV or JSON files on the **Knowle
 4. Chatbots retrieve passages before answering; agents and harnesses get a document-search tool. Every answer lists the sources it used.
 5. Uploads, searches and deletions are logged, and **Delete all my data** erases documents, chunks and server-side records together.
 
-Two sample policies from a fictional company are shared read-only so retrieval works on first visit. The schema is in [`supabase/migrations/0001_berth.sql`](supabase/migrations/0001_berth.sql).
+Five Meridian Bank policies are shared read-only so retrieval works on first visit, one for each example. They are defined in [`api/_samples.js`](api/_samples.js) and indexed automatically the first time they are needed. The schema is in [`supabase/migrations/0001_berth.sql`](supabase/migrations/0001_berth.sql).
 
 ## Demo mode
 
@@ -107,7 +110,7 @@ js/pipeline.js      multi-model execution: routing, review, revision, cost per s
 js/diagrams.js      architecture patterns and the SVG diagram renderer
 js/risk.js          risk tiers, tier-to-control mapping, model-assisted classification
 js/tools.js         browser-safe agent tools
-js/templates.js     the four governed examples
+js/templates.js     the five governed examples (Meridian Bank)
 js/store.js         local persistence
 js/app.js           interface, routing and the send pipeline
 js/api.js           client for the server functions

@@ -17,13 +17,16 @@ async function insertChunks(tx, documentId, owner, chunks, vectors) {
   }
 }
 
-/** Index the sample documents once, the first time anyone needs them. */
+let samplesReady = false;
+
+/** Index any sample document that is not in the database yet. The app role
+ *  cannot delete samples, so retired ones are removed by a migration. */
 export async function ensureSamples() {
+  if (samplesReady) return;
   await asOwner('sample', async (tx) => {
     await tx`select pg_advisory_xact_lock(424242)`; // one seeder at a time
-    const [{ n }] = await tx`select count(*)::int as n from berth.documents where owner = 'sample'`;
-    if (n > 0) return;
-    for (const s of SAMPLES) {
+    const have = new Set((await tx`select name from berth.documents where owner = 'sample'`).map((r) => r.name));
+    for (const s of SAMPLES.filter((x) => !have.has(x.name))) {
       const chunks = chunkText(s.text);
       const vectors = await embed(chunks);
       const [doc] = await tx`insert into berth.documents (owner, name, chars, chunk_count)
@@ -31,6 +34,7 @@ export async function ensureSamples() {
       await insertChunks(tx, doc.id, 'sample', chunks, vectors);
     }
   });
+  samplesReady = true;
 }
 
 export default async function handler(req, res) {
