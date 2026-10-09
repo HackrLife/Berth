@@ -72,7 +72,17 @@ On the hosted deployment, visitors need no API keys. A server function (`supabas
 
 ## Running it
 
-The front end is a static site with no build step, published by GitHub Pages from this repository. Demo mode and retrieval use one Supabase Edge Function (`supabase/functions/berth-api`) running in Sydney next to the database; without it the site still runs with your own API keys.
+The front end is a static site with no build step. The hosted version runs on **Vercel**, deployed from this repository on every push, with four small Vercel Functions in `api/` pinned to the Sydney region. Without them the site still runs with your own API keys.
+
+Vercel environment variables:
+
+| Name | Purpose |
+|---|---|
+| `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `XAI_API_KEY`, `OPENROUTER_API_KEY` | Demo-mode model access; OpenAI also creates embeddings |
+| `BERTH_DB_PASSWORD` | Password of the restricted `berth_app` database role (or set `BERTH_DATABASE_URL` in full) |
+| `DEMO_VISITOR_LIMIT`, `DEMO_DAILY_LIMIT` | Optional request caps (defaults 40 and 400 per day) |
+
+An equivalent Supabase Edge Function (`supabase/functions/berth-api`) serves copies of the site hosted on static hosts such as GitHub Pages.
 
 ```bash
 git clone https://github.com/HackrLife/Berth.git
@@ -102,8 +112,11 @@ js/store.js         local persistence
 js/app.js           interface, routing and the send pipeline
 js/api.js           client for the server functions
 js/extract.js       in-browser text extraction (PDF, Word, text)
-supabase/functions/berth-api/   one Edge Function: demo proxy with limits,
-                                document indexing, vector search, erasure
+api/proxy.js                    demo mode: key-holding proxy with limits
+api/docs.js                     index, list and delete documents
+api/search.js                   vector search under row-level security
+api/status.js                   what this deployment supports
+supabase/functions/berth-api/   the same API as a Supabase Edge Function
 supabase/migrations/            database schema, restricted role and policies
 ```
 

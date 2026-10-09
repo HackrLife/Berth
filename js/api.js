@@ -1,9 +1,13 @@
-// Talks to Berth's server function (demo mode and retrieval), a Supabase Edge
-// Function in the Sydney region. Without it, `loadStatus()` resolves to
-// { demo: false } and Berth runs on the visitor's own keys only.
+// Talks to Berth's server functions (demo mode and retrieval).
+// On Vercel they are same-origin Vercel Functions under /api. A copy served
+// from GitHub Pages uses the Supabase Edge Function instead. Without either,
+// `loadStatus()` resolves to { demo: false } and Berth runs on the visitor's
+// own keys only.
 
-export const API_BASE = 'https://cxtcwslqzrzjaulqcvvu.supabase.co/functions/v1/berth-api';
-const REGION = { 'x-region': 'ap-southeast-2' }; // run the function in Sydney, next to the data
+const SUPABASE_FN = 'https://cxtcwslqzrzjaulqcvvu.supabase.co/functions/v1/berth-api';
+const onStaticHost = /github\.io$/.test(location.hostname);
+export const API_BASE = onStaticHost ? SUPABASE_FN : '/api';
+const REGION = onStaticHost ? { 'x-region': 'ap-southeast-2' } : {}; // keep the edge function in Sydney
 
 let _status = null;
 
