@@ -161,6 +161,19 @@ if ((state.version || 0) < 3) {
   save();
 }
 
+// v4 made GPT the default model: move the example builds off Gemini.
+if ((state.version || 0) < 4) {
+  for (const b of state.builds) {
+    if (!b.templateKey) continue;
+    if (b.modelId === 'gemini') b.modelId = 'gpt';
+    for (const [role, id] of Object.entries(b.models || {})) if (id === 'gemini') b.models[role] = 'gpt';
+    const t = TEMPLATES.find((x) => x.key === b.templateKey);
+    if (t?.key === 'candidate-screener') { b.modelId = t.modelId; b.models = { ...t.models }; }
+  }
+  state.version = 4;
+  save();
+}
+
 // A reload during an answer leaves it half-finished; mark it so.
 for (const chat of Object.values(state.chats)) {
   for (const m of chat) {
@@ -461,7 +474,7 @@ function renderHow(id) {
 // ---------------------------------------------------------------------------
 // Builder: what are you building, then which models
 
-const pick = { type: null, modelId: null, models: {} };
+const pick = { type: null, modelId: 'gpt', models: {} }; // GPT is the default model
 
 function modelOption(m, selected) {
   const s = modelStatus(m);
@@ -1316,7 +1329,7 @@ function route() {
 function setPickType(type) {
   pick.type = type;
   if (type !== 'chatbot') {
-    const base = defaultModels(type, pick.models.strong || 'claude');
+    const base = defaultModels(type, pick.models.strong || 'gpt');
     pick.models = { ...base, ...pick.models };
     if (type === 'harness' && !pick.models.reviewer) pick.models.reviewer = base.reviewer;
   }
