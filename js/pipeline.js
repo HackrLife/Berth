@@ -28,9 +28,9 @@ export function rolesFor(type) {
   return [];
 }
 
-export function defaultModels(type, primary = 'claude') {
+export function defaultModels(type, primary = 'gpt') {
   if (type === 'chatbot') return {};
-  const m = { router: 'mistral', fast: 'gemini', strong: primary };
+  const m = { router: 'mistral', fast: 'gpt', strong: primary };
   if (type === 'harness') m.reviewer = primary === 'gpt' ? 'claude' : 'gpt';
   return m;
 }
