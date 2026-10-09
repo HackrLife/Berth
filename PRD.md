@@ -150,7 +150,7 @@ The hosted deployment runs on the author's own API keys so that reviewers need n
 
 ## 7. Architecture
 
-- **Type:** a static single-page application with no build step, published by GitHub Pages from the GitHub repository, plus one Supabase Edge Function for demo mode and retrieval, invoked in the Sydney region next to the database. The repository is the source of truth for both.
+- **Type:** a static single-page application with no build step plus four serverless functions, hosted on Vercel and deployed from the GitHub repository on every push, with functions pinned to the Sydney region next to the database. The repository is the single source of truth.
 - **Stack:** HTML, CSS and plain JavaScript ES modules: `models` (catalogue), `providers` (API adapters), `pipeline` (routing, review and cost), `governance` (redaction, policy, output checks, audit), `risk` (tiers and controls), `tools`, `templates`, `store` and `app` (interface).
 - **Model calls:** made directly from the browser to each provider's API with the user's own key. Three adapters cover all seven models: the Anthropic Messages API, the OpenAI-compatible Chat Completions API (OpenAI, xAI and OpenRouter) and the Gemini API. No Berth server exists, so no request passes through the author.
 - **Storage:** browser `localStorage` for keys, assistants, settings, chat history and the audit log.
