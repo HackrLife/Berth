@@ -72,8 +72,8 @@ async function post(url, headers, body, signal, r) {
       const j = await res.json();
       detail = (typeof j.error === 'string' ? j.error : j.error?.message) || j.message || JSON.stringify(j).slice(0, 300);
     } catch { /* ignore */ }
-    const hint = res.status === 401 || res.status === 403
-      ? 'The API key was rejected. Check it in Settings.'
+    const hint = res.status === 401 || res.status === 403 || (res.status === 400 && /api key/i.test(detail))
+      ? (r?.viaProxy ? `The demo's ${r.provider} key was rejected by the provider.` : 'The API key was rejected. Check it in Settings.')
       : res.status === 404
         ? 'The model id may be wrong. Load the available models in Settings.'
         : res.status === 429 ? (r?.viaProxy ? '' : 'Rate limit or quota reached on your provider account.') : '';
