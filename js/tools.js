@@ -41,7 +41,7 @@ export const TOOLS = {
       parameters: { type: 'object', properties: { query: { type: 'string', description: 'What to look for, in plain words' } }, required: ['query'] },
     },
     run: async (args, build, ctx) => {
-      const results = await docs.search(String(args.query || ''), 5);
+      const results = await docs.search(String(args.query || ''), 5, { names: build.docScope || null });
       const offset = ctx?.sourceCount?.() || 0;
       ctx?.onSources?.(results);
       return results.length ? formatSources(results, offset) : 'No relevant passages found in the documents.';

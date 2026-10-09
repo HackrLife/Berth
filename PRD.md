@@ -51,7 +51,7 @@ Enterprise AI platforms address the first three problems at scale. Berth is a de
 ## 5. Core features
 
 ### 5.1 Landing page and builder
-The site opens on a landing page that explains what Berth does, how the three build types differ, why routing between models reduces cost, which governance controls apply, and the four governed examples. "Start building" opens the builder, which asks two questions in order: what are you building, and which models take which roles.
+The site opens on a landing page that explains what Berth does, how the three build types differ, why routing between models reduces cost, which governance controls apply, and the five governed examples. "Start building" opens the builder, which asks two questions in order: what are you building, and which models take which roles.
 
 Seven models are available:
 
@@ -85,14 +85,15 @@ v0.1 agents and harnesses can use four browser-safe tools: a calculator, the cur
 
 Every build records its intended purpose and its deployment context ("used by"), which together determine its risk tier (5.4).
 
-v0.1 ships with four governed examples, one for each of four regulated industries and together covering all three build types:
+v0.1 ships with five governed examples, all inside **Meridian Bank**, a fictional Australian bank. Setting every example in one organisation shows that risk follows the use, not the company: the same bank runs minimal-risk and high-risk AI side by side. Each example answers from its own policy document, preloaded in Knowledge, and the five together cover all three build types:
 
-| Example | Industry | Type | Models | Job |
-|---|---|---|---|---|
-| **Symptom Guide** | Health | Chatbot | Claude | Gives general guidance on symptoms and when to seek care. |
-| **Loan Eligibility Checker** | Finance | Agent | Router Mistral · fast Gemini · strong GPT | Assesses a loan application against stated lending criteria, using the calculator and the criteria text. |
-| **Contract Reviewer** | Legal | Chatbot | Mistral | Reviews contract clauses and identifies obligations and risks. |
-| **Candidate Screener** | HR | Harness | Router Mistral · fast Gemini · strong Claude · reviewer GPT | Assesses CVs against a job description and proposes a shortlist. |
+| Example | Bank function | Policy document | Type | Models | Job |
+|---|---|---|---|---|---|
+| **Staff Health Guide** | Staff health | Staff Health and Wellbeing Guide | Chatbot | Claude | Gives staff general guidance on symptoms, when to seek care, and sick and carer's leave. |
+| **Loan Eligibility Checker** | Lending | Personal Lending Credit Policy | Agent | Router Mistral · fast GPT · strong GPT | Assesses a personal loan application against the credit policy, using the calculator and document search. |
+| **Contract Reviewer** | Legal | Supplier Contracting Standards | Chatbot | Mistral | Reviews supplier clauses against the bank's standards and flags what needs escalation. |
+| **Candidate Screener** | Recruitment | Recruitment and Fair Hiring Policy | Harness | Router Mistral · fast GPT · strong GPT · reviewer Claude | Assesses CVs against the job description and proposes a shortlist. |
+| **Policy Assistant** | Operations | Staff Handbook | Chatbot | GPT | Answers staff questions on travel, expenses, gifts, security and AI use. |
 
 ### 5.3 Governance layer (workspace level)
 The governance layer runs on every outgoing prompt, in this order:
@@ -116,7 +117,7 @@ The four preset assistants are classified and safeguarded as follows:
 
 | Assistant | Tier and basis | Domain safeguards |
 |---|---|---|
-| **Symptom Guide** | High: software with a medical purpose can qualify as a medical device, which brings it under Annex I | Red-flag symptoms (for example chest pain, stroke signs) stop the response and show an emergency message; no diagnosis or dosage is given; every answer carries a "not medical advice" label |
+| **Staff Health Guide** | High: software with a medical purpose can qualify as a medical device, which brings it under Annex I | Red-flag symptoms (for example chest pain, stroke signs) stop the response and show an emergency message; no diagnosis or dosage is given; every answer carries a "not medical advice" label |
 | **Loan Eligibility Checker** | High: creditworthiness assessment, Annex III(5)(b) | Every assessment must state plain-language reasons that the applicant could understand (see the right to explanation in Art. 86); a human signs off before any outcome is final |
 | **Contract Reviewer** | Minimal when used by a law firm; High when the deployment context is a court or tribunal, Annex III(8)(a) | Client names are redacted to protect privilege; every cited case or statute is flagged "unverified" until a lawyer confirms it; lawyer sign-off on outputs |
 | **Candidate Screener** | High: recruitment and selection, Annex III(4)(a) | Blind screening removes name, age, gender, photo references and nationality before the model reads a CV; the assistant may shortlist but may not reject a candidate |
@@ -134,14 +135,14 @@ Users upload documents, and builds answer from them with cited sources.
 - **Isolation:** each visitor's documents are separated by row-level security in the database. The API uses a restricted role limited to Berth's own schema.
 - **Use in builds:** chatbots retrieve passages before every answer; agents and harnesses receive a document-search tool. Answers cite sources such as [S1] and list the passages used.
 - **Erasure and logging:** uploads, searches and deletions are logged; a single action erases a visitor's documents, chunks and server-side records.
-- **Samples:** two policies from a fictional company are shared read-only so retrieval works on first visit, with a fifth example build (Policy Assistant) grounded in them.
+- **Samples:** five Meridian Bank policies, one per example, are shared read-only so retrieval works on first visit. Each example's search is scoped to its own policy.
 
 ### 5.7 Demo mode
 The hosted deployment runs on the author's own API keys so that reviewers need no setup. A server function forwards requests only to known provider endpoints and an allow-list of models, caps output length, and limits requests per visitor and per day. Visitors who add their own keys call providers directly.
 
 ## 6. User flow (first use)
 
-1. The user opens the GitHub Pages link and sees the builder: seven models and three build types, with the four governed examples below.
+1. The user opens the GitHub Pages link and sees the builder: seven models and three build types, with the five governed examples below.
 2. They add an API key in Settings.
 3. They open the **Candidate Screener** harness and send a CV that includes the candidate's name, age, email address and phone number. The composer shows what will be removed before they press send.
 4. Berth removes the identifying details, the harness searches the job description, and the shortlist is marked "held for approval". The user approves it, and the audit log records the request, the tier, the tool use and the approver.
@@ -189,7 +190,7 @@ The hosted deployment runs on the author's own API keys so that reviewers need n
 |---|---|---|
 | M1 | PRD and repository | This document, repository, README, GitHub Pages enabled |
 | M2 | Builder and chat | Landing page, type-first builder, seven models, model roles and routing, reviewer stage, cost per answer, streaming, API key settings |
-| M3 | Governed examples | Four industry examples, create and edit |
+| M3 | Governed examples | Five Meridian Bank examples with their policies, create and edit |
 | M4 | Governance | Redaction, policy check, audit log with export |
 | M4b | Risk tiers | Classifier on save, tier-to-control mapping, domain safeguards, deployment-context switch |
 | M5 | Polish and launch | Conversation branching, demo script, screenshots, live link |

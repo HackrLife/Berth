@@ -99,7 +99,7 @@ function modelStatus(m) {
 }
 
 // ---------------------------------------------------------------------------
-// Seed the four governed templates on first run
+// Seed the five governed examples on first run
 
 function buildFromTemplate(t) {
   return {
@@ -115,6 +115,7 @@ function buildFromTemplate(t) {
     models: t.models ? { ...t.models } : defaultModels(t.type, t.modelId),
     routing: true,
     useDocs: Boolean(t.useDocs),
+    docScope: t.docScope ? [...t.docScope] : undefined,
     tools: [...(t.tools || [])],
     knowledge: t.knowledge || '',
     protectedTerms: [...(t.protectedTerms || [])],
@@ -171,6 +172,18 @@ if ((state.version || 0) < 4) {
     if (t?.key === 'candidate-screener') { b.modelId = t.modelId; b.models = { ...t.models }; }
   }
   state.version = 4;
+  save();
+}
+
+// v5 set every example inside Meridian Bank, each grounded in its own policy document.
+if ((state.version || 0) < 5) {
+  for (const t of TEMPLATES) {
+    const i = state.builds.findIndex((b) => b.templateKey === t.key);
+    const fresh = buildFromTemplate(t);
+    if (i >= 0) state.builds[i] = { ...fresh, id: state.builds[i].id };
+    else state.builds.push(fresh);
+  }
+  state.version = 5;
   save();
 }
 
@@ -289,7 +302,7 @@ function renderLanding() {
 
     <section class="band">
       <h2 class="section-title">Governed examples</h2>
-      <p class="dim section-lede">One for each of four regulated industries, plus a policy assistant that answers from uploaded documents.</p>
+      <p class="dim section-lede">Five uses inside Meridian Bank, a fictional bank. Each answers from the bank’s own policy in Knowledge.</p>
       <div class="grid grid-auto">
         ${examples.map((b) => {
           const t = tmpl(b.templateKey);
@@ -414,7 +427,7 @@ function renderKnowledge() {
             </tr>`).join('') : '<tr><td colspan="6" class="dim">No documents yet.</td></tr>'}</tbody>
         </table>
       </div>
-      <p class="small dim">Sample documents belong to a fictional company and are shared read-only with every visitor. Your own documents are visible only to this browser.</p>
+      <p class="small dim">Sample documents are the policies of Meridian Bank, a fictional bank, and are shared read-only with every visitor. Your own documents are visible only to this browser.</p>
     </section>
   </div>`);
 }
@@ -1072,11 +1085,13 @@ async function send(build, text, { regenerate = false } = {}) {
   run.controller = new AbortController();
   renderRun(build.id);
 
-  const toolNames = build.type === 'chatbot' ? [] : [...new Set([...(build.tools || []), ...(build.useDocs && currentStatus().retrieval ? ['documents'] : [])])]
+  const docsOn = build.useDocs && currentStatus().retrieval;
+  // With document search on, it replaces the inline knowledge text (kept as the offline fallback).
+  const toolNames = build.type === 'chatbot' ? [] : [...new Set([...(build.tools || []).filter((k) => !(docsOn && k === 'knowledge' && build.docScope)), ...(docsOn ? ['documents'] : [])])]
     .filter((k) => build.harness?.toolModes?.[k] !== 'off');
   reply.sources = [];
   const retrieve = async (q) => {
-    const r = await docsApi.search(q, 5);
+    const r = await docsApi.search(q, 5, { names: build.docScope || null });
     reply.sources.push(...r);
     return r;
   };
