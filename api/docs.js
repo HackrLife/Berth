@@ -45,7 +45,9 @@ export default async function handler(req, res) {
       await ensureSamples();
       const docs = await asOwner(visitor, (tx) => tx`
         select id, name, chars, chunk_count, redactions, created_at, owner = 'sample' as sample
-        from berth.documents order by sample desc, created_at desc`);
+        from berth.documents
+        where owner <> 'sample' or name = any(${SAMPLES.map((x) => x.name)})
+        order by sample desc, created_at desc`);
       return send(res, 200, { documents: docs });
     }
 
