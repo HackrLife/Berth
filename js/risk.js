@@ -40,10 +40,16 @@ export function tierControls(tier) {
 export function controlsFor(build) {
   const base = tierControls(build.tier);
   const merged = { ...base, ...(build.safeguards || {}) };
+  if (build.requireApproval) merged.approval = true;
   if (build.type === 'harness' && build.harness) {
     merged.approval = build.harness.approval ?? merged.approval;
     merged.fullLog = build.harness.fullLog ?? merged.fullLog;
     merged.aiLabel = build.harness.aiLabel ?? merged.aiLabel;
+  }
+  // High risk locks human oversight (Art. 14) and record-keeping (Art. 12) on.
+  if (build.tier === 'high') {
+    merged.approval = true;
+    merged.fullLog = true;
   }
   return merged;
 }

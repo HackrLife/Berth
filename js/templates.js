@@ -15,6 +15,7 @@ const BLIND_SCREENING = [
 export const TEMPLATES = [
   {
     key: 'symptom-guide',
+    minutesManual: 5, // estimated minutes a person spends on this task without Berth
     industry: 'Staff health',
     name: 'Staff Health Guide',
     type: 'chatbot',
@@ -48,6 +49,7 @@ export const TEMPLATES = [
   },
   {
     key: 'loan-checker',
+    minutesManual: 20, // estimated minutes a person spends on this task without Berth
     industry: 'Lending',
     name: 'Loan Eligibility Checker',
     type: 'agent',
@@ -91,6 +93,7 @@ Living expenses: use the declared figure or $2,100 per month for a single applic
   },
   {
     key: 'contract-reviewer',
+    minutesManual: 25, // estimated minutes a person spends on this task without Berth
     industry: 'Legal',
     name: 'Contract Reviewer',
     type: 'chatbot',
@@ -122,6 +125,7 @@ Living expenses: use the declared figure or $2,100 per month for a single applic
   },
   {
     key: 'candidate-screener',
+    minutesManual: 15, // estimated minutes a person spends on this task without Berth
     industry: 'Recruitment',
     name: 'Candidate Screener',
     type: 'harness',
@@ -171,6 +175,7 @@ Location: hybrid, three days a week in the Sydney office.`,
   },
   {
     key: 'policy-assistant',
+    minutesManual: 6, // estimated minutes a person spends on this task without Berth
     industry: 'Operations',
     name: 'Policy Assistant',
     type: 'chatbot',

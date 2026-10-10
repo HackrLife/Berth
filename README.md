@@ -1,32 +1,28 @@
 # Berth
 
-**A governed AI workspace.** Choose a model, build a chatbot, an agent or a harness, and Berth governs it according to what it is used for.
+**Build agents that increase productivity, prove compliance and drive governance.** Multi-model agentic AI with governance and compliance logs.
 
 Berth is a small, working prototype built as preparatory work for doctoral research on AI governance. The question it makes concrete is how obligations usually written as policy or regulation can be implemented as product behaviour that a person meets while working.
 
-**Live demo:** https://hackrlife.github.io/Berth/
+**Live demo:** https://berth-pearl.vercel.app
 **Product requirements:** [PRD.md](PRD.md)
 
 ---
 
 ## What it does
 
-1. **Say what you are building.**
-   - **Chatbot:** one model with instructions and reference text.
-   - **Agent:** a cheap router model sorts each request as simple or complex and sends it to a fast model or a strong model. The model doing the work can use tools (calculator, date and time, Wikipedia, search over its reference text).
-   - **Harness:** the agent pipeline plus an independent reviewer model that checks every draft against the rules, one revision on the strong model if the reviewer finds issues, per-tool permissions and human approval.
-2. **Assign models to roles.** Seven models are available: Claude, GPT, Gemini and Grok (closed weights), and Mistral, Llama and Qwen (open weights, through OpenRouter). A chatbot uses one. An agent uses a router, a fast model and a strong model. A harness adds a reviewer, ideally from a different vendor.
-3. **Get a risk tier.** When you save, the model proposes a tier under the EU AI Act based on the build's purpose and who uses it. You confirm or override it, and the tier switches on the matching controls.
-4. **Use it with governance and cost in view.**
-   - Personal data (emails, phone numbers, card numbers, IBANs, Australian Tax File Numbers) is replaced with placeholders **before** the prompt leaves the browser. The composer shows what will be removed while you type.
-   - Blocked terms and a list of allowed models apply across the workspace.
-   - High-risk answers are held until a person approves them.
-   - Every answer shows its pipeline (which model did which stage), its token use and cost, and what the same run would have cost on the strong model alone.
-   - Every request, route, review, block, approval and tier decision goes into an audit log you can export as CSV or JSON.
+Berth is organised around four outcomes, one tab each.
+
+1. **Build agents.** Design an agent as a pipeline of steps: Input, Protect, Route, Work, Review and Approve. Click a step to set it up in a side sheet. Adding a Route step turns a chatbot into an agent; adding a Review step turns an agent into a harness. Seven models are available: Claude, GPT, Gemini and Grok (closed weights), and Mistral, Llama and Qwen (open weights, through OpenRouter). A test run executes the real pipeline and lights up each step as it completes.
+2. **Increase productivity.** In Work, staff use the agents. Answers cite the company documents they came from, routing sends simple requests to cheaper models, and every answer shows its cost, the saving against a single large model, and the estimated minutes of manual work saved.
+3. **Prove compliance.** Each agent is classified under the EU AI Act by its purpose and who uses it. A model proposes the tier, a person confirms it, and the tier switches on the required controls. High risk locks human approval (Art. 14) and record-keeping (Art. 12) on. Each agent exports an **evidence pack**: purpose, tier, legal basis, models, controls, documents, outcomes and audit records in one Markdown file.
+4. **Drive governance.** Answers from high-risk agents wait in an **Approvals** inbox for the right person. Workspace policy sets allowed models, the personal data to remove and blocked terms. Every request, route, review, block, approval and tier decision goes into an audit log exportable as CSV or JSON.
+
+Personal data (emails, phone numbers, card numbers, IBANs, Australian Tax File Numbers) is replaced with placeholders **before** a prompt leaves the browser, and the composer shows what will be removed while you type.
 
 ## How it works: architecture patterns
 
-The site's **How it works** page documents ten industry-agnostic patterns, each with an architecture diagram in one shared notation (models, tools, governance checkpoints, decisions, people and audit records):
+The **Build › Architecture patterns** page documents ten industry-agnostic patterns, each with an architecture diagram in one shared notation (models, tools, governance checkpoints, decisions, people and audit records):
 
 | Group | Pattern | In Berth today |
 |---|---|---|
