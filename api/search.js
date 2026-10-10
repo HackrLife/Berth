@@ -4,6 +4,7 @@
 
 import { send, readJson, visitorOf, asOwner, logEvent, embed, vectorLiteral, fail } from './_lib.js';
 import { ensureSamples } from './docs.js';
+import { SAMPLES } from './_samples.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return send(res, 405, { error: 'POST only' });
@@ -21,6 +22,13 @@ export default async function handler(req, res) {
       if (names && !ids) {
         const found = await tx`select id from berth.documents where name = any(${names})`;
         if (found.length) ids = found.map((r) => r.id);
+      }
+      // Otherwise search the visitor's own documents and the current samples only.
+      if (!ids) {
+        const visible = await tx`select id from berth.documents
+          where owner <> 'sample' or name = any(${SAMPLES.map((x) => x.name)})`;
+        ids = visible.map((r) => r.id);
+        if (!ids.length) return [];
       }
       const rows = await tx`
         select id, document_id, document_name, idx, content, similarity
