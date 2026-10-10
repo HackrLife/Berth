@@ -1,6 +1,6 @@
 # Berth — Product Requirements Document
 
-**Version:** 0.5 (draft)
+**Version:** 0.6 (draft)
 **Author:** Dev Das
 **Status:** In development
 **Last updated:** September 2026
@@ -50,8 +50,14 @@ Enterprise AI platforms address the first three problems at scale. Berth is a de
 
 ## 5. Core features
 
-### 5.1 Landing page and builder
-The site opens on a landing page that explains what Berth does, how the three build types differ, why routing between models reduces cost, which governance controls apply, and the five governed examples. "Start building" opens the builder, which asks two questions in order: what are you building, and which models take which roles.
+### 5.1 Structure, home page and agent designer
+Berth is organised around four outcomes, each a tab in the top app bar (a bottom navigation bar on phones): **Build** agents, **Work** with them to increase productivity, **Comply** to prove compliance, and **Govern** to drive governance. Detail opens in side sheets; collapsible side lists appear only on nested pages.
+
+- **Home** states the value proposition in one sentence and shows the four-step journey as four cards, each with a small view of the product, followed by a schematic of how a request flows: people, Berth's four layers (protect, route, control, log), then the models.
+- **Build** opens a visual designer. An agent is a pipeline of steps: Input (purpose and who uses it), Protect (redaction and safeguards), Route (router and fast model), Work (strong model, tools, documents, instructions), Review (independent reviewer) and Approve (human sign-off). Adding a Route step turns a chatbot into an agent and adding a Review step turns an agent into a harness. Controls required by the risk tier are marked on their steps and cannot be removed. A test run executes the real pipeline and lights up each step.
+- **Work** is a full-width chat with a collapsible list of agents, a stage strip on every answer, and a productivity bar: answers, estimated minutes saved (from the time a person takes per task, set in the Input step), spend, and the saving against a single large model.
+- **Comply** lists every agent with its tier, legal basis, deployment context and controls, and exports an evidence pack per agent.
+- **Govern** holds the approvals inbox, the audit log, workspace policy and settings.
 
 Seven models are available:
 
